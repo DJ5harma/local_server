@@ -71,11 +71,50 @@ def root():
 def monitor_test():
     """Background task to monitor test progress and trigger completion"""
     import time
+    last_state = None
+    starting_state_time = None
+    MAX_STARTING_TIME = 30  # If stuck in STARTING for 30 seconds, reset to IDLE
+    
     while True:
         try:
             time.sleep(1)  # Check every second
             
-            if test_manager.state == TestState.RUNNING:
+            current_state = test_manager.state
+            
+            # Detect state changes
+            if current_state != last_state:
+                print(f"🔄 State changed: {last_state} -> {current_state}")
+                last_state = current_state
+                
+                # Track when we enter STARTING state
+                if current_state == TestState.STARTING:
+                    starting_state_time = time.time()
+                else:
+                    starting_state_time = None
+            
+            # Recovery: If stuck in STARTING state for too long, reset to IDLE
+            if current_state == TestState.STARTING and starting_state_time:
+                elapsed = time.time() - starting_state_time
+                if elapsed > MAX_STARTING_TIME:
+                    print(f"⚠️  Test stuck in STARTING state for {elapsed:.1f}s, resetting to IDLE")
+                    test_manager.reset_to_idle()
+                    last_state = TestState.IDLE
+                    starting_state_time = None
+                    # Emit state update
+                    if socketio:
+                        try:
+                            status = test_manager.get_status_dict()
+                            from .api.routes import get_test_data_sync
+                            test_data = get_test_data_sync()
+                            socketio.emit("update", {
+                                "status": status,
+                                "data": test_data
+                            }, namespace='/', broadcast=True)
+                        except:
+                            pass
+            
+            # Monitor running tests
+            if current_state == TestState.RUNNING:
                 if test_manager.is_test_complete():
                     test_manager.complete_test()
                     print("✅ Test completed after 30 minutes")
@@ -108,9 +147,14 @@ def monitor_test():
                         t30_thread.start()
                     
                     # Emit completion event via SocketIO
-                    socketio.emit("test_completed", {"type": "test_completed"})
+                    try:
+                        socketio.emit("test_completed", {"type": "test_completed"}, namespace='/', broadcast=True)
+                    except Exception as e:
+                        print(f"⚠️  Error emitting completion event: {e}")
         except Exception as e:
             print(f"⚠️  Error in monitor_test: {e}")
+            import traceback
+            traceback.print_exc()
             time.sleep(1)
 
 
@@ -132,13 +176,18 @@ def handle_disconnect():
 def handle_update_request():
     """Handle update request from client"""
     from .api.routes import get_test_data_sync
-    status = test_manager.get_status_dict()
-    test_data = get_test_data_sync()
-    
-    emit('update', {
-        "status": status,
-        "data": test_data
-    })
+    try:
+        status = test_manager.get_status_dict()
+        test_data = get_test_data_sync()
+        
+        emit('update', {
+            "status": status,
+            "data": test_data
+        })
+    except Exception as e:
+        print(f"⚠️  Error handling update request: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 # Initialize routes and websocket with dependencies (after route definitions)

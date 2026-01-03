@@ -11,7 +11,8 @@ const AppState = {
     testStatus: null,
     testData: null,
     updateInterval: null,
-    statusInterval: null  // For home page status polling fallback
+    statusInterval: null,  // For home page status polling fallback
+    startingStateTime: null  // Track when we entered STARTING state
 };
 
 // Page IDs
@@ -25,9 +26,24 @@ const PAGES = {
 };
 
 // Initialize on page load
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     initializeEventListeners();
     showPage(PAGES.LOGIN);
+    
+    // Check current server state on load (in case of page refresh)
+    try {
+        const response = await fetch('/api/test/status');
+        if (response.ok) {
+            const status = await response.json();
+            console.log('📊 Current server state on load:', status.state);
+            
+            // If test is running or starting, we should be on progress page
+            // But since we're on login, we'll let the user login first
+            // The state will be synced after login
+        }
+    } catch (error) {
+        console.warn('Could not check server state on load:', error);
+    }
 });
 
 /**
@@ -114,10 +130,39 @@ async function handleLogin() {
             AppState.authenticated = true;
             errorDiv.textContent = '';
             passwordInput.value = '';
-            showPage(PAGES.HOME);
-            // Connect Socket.IO for real-time updates (will fallback to polling if needed)
-            connectWebSocket();
-            startStatusUpdates();
+            
+            // Check current test state and navigate accordingly
+            try {
+                const statusResponse = await fetch('/api/test/status');
+                if (statusResponse.ok) {
+                    const status = await statusResponse.json();
+                    console.log('📊 Current test state after login:', status.state);
+                    
+                    // If test is running or starting, go to progress page
+                    if (status.state === 'running' || status.state === 'starting') {
+                        showPage(PAGES.PROGRESS);
+                        connectWebSocket();
+                        startProgressUpdates();
+                    } else if (status.state === 'completed') {
+                        showPage(PAGES.COMPLETION);
+                    } else {
+                        showPage(PAGES.HOME);
+                        connectWebSocket();
+                        startStatusUpdates();
+                    }
+                } else {
+                    // Fallback to home if status check fails
+                    showPage(PAGES.HOME);
+                    connectWebSocket();
+                    startStatusUpdates();
+                }
+            } catch (error) {
+                console.error('Error checking test state after login:', error);
+                // Fallback to home
+                showPage(PAGES.HOME);
+                connectWebSocket();
+                startStatusUpdates();
+            }
         } else {
             errorDiv.textContent = 'Invalid password';
             passwordInput.value = '';
@@ -129,83 +174,51 @@ async function handleLogin() {
 }
 
 /**
- * Handle test start
+ * Handle test start - simplified
  */
 async function handleStartTest() {
-    console.log('🚀 Starting test...');
     const startBtn = document.getElementById('start-test-btn');
-    if (!startBtn) {
-        console.error('❌ Start button not found!');
-        return;
-    }
+    if (!startBtn) return;
     
     const originalText = startBtn.textContent;
     startBtn.disabled = true;
     startBtn.textContent = 'Starting...';
     
     try {
-        console.log('📡 Sending POST to /api/test/start');
-        
-        // Create AbortController for timeout
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
         
         const response = await fetch('/api/test/start', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             signal: controller.signal
         });
         
         clearTimeout(timeoutId);
-
-        console.log('📥 Response received:', response.status, response.statusText);
         
-        let data;
-        try {
-            data = await response.json();
-            console.log('📊 Response data:', data);
-        } catch (e) {
-            console.error('❌ Failed to parse JSON:', e);
-            const text = await response.text();
-            console.error('Response text:', text);
-            throw new Error('Invalid response from server');
-        }
+        const data = await response.json();
         
         if (response.ok && data.success) {
-            console.log('✅ Test started successfully, state:', data.state);
+            // Success - navigate to progress page
             showPage(PAGES.PROGRESS);
-            // Connect Socket.IO for real-time updates
-            // startProgressUpdates() will only run if Socket.IO fails
             connectWebSocket();
-            // Small delay to start polling fallback if Socket.IO doesn't connect quickly
-            setTimeout(() => {
-                if (!AppState.websocket || !AppState.websocket.connected) {
-                    startProgressUpdates();
-                }
-            }, 500);
+            startProgressUpdates();
         } else {
-            const errorMsg = data.error || data.detail || 'Unknown error';
-            console.error('❌ Failed to start test:', errorMsg);
-            console.error('Response status:', response.status);
-            console.error('Response data:', data);
-            alert('Failed to start test: ' + errorMsg);
+            // Error - show message and reset button
+            alert('Failed to start test: ' + (data.error || 'Unknown error'));
             startBtn.disabled = false;
             startBtn.textContent = originalText;
         }
     } catch (error) {
-        console.error('❌ Start test error:', error);
-        console.error('Error details:', error.message);
-        
-        let errorMsg = error.message;
+        // Handle errors
+        let errorMsg = 'Failed to start test';
         if (error.name === 'AbortError') {
             errorMsg = 'Request timed out. Server may be unresponsive.';
-        } else if (error.message.includes('Failed to fetch')) {
+        } else if (error.message?.includes('Failed to fetch')) {
             errorMsg = 'Cannot connect to server. Is the server running?';
         }
         
-        alert('Failed to start test: ' + errorMsg + '\n\nCheck browser console and server logs for details.');
+        alert(errorMsg);
         startBtn.disabled = false;
         startBtn.textContent = originalText;
     }
@@ -242,92 +255,99 @@ async function handleAbortTest() {
 }
 
 /**
- * Connect to Socket.IO for real-time updates
+ * Connect to Socket.IO for real-time updates - simplified
  */
 function connectWebSocket() {
-    // Use Socket.IO client library (fallback to polling if not available)
+    // Clean up existing connection
+    if (AppState.websocket) {
+        try {
+            AppState.websocket.removeAllListeners();
+            AppState.websocket.disconnect();
+        } catch (e) {
+            // Ignore cleanup errors
+        }
+        AppState.websocket = null;
+    }
+    
+    // Fallback to polling if Socket.IO not available
     if (typeof io === 'undefined') {
-        console.warn('Socket.IO not loaded, using polling fallback');
-        startProgressUpdates();
+        _startPollingFallback();
         return;
     }
 
     try {
-        console.log('Connecting to Socket.IO...');
         AppState.websocket = io({
-            transports: ['polling', 'websocket'],  // Try polling first, then websocket
+            transports: ['polling', 'websocket'],
             reconnection: true,
-            reconnectionAttempts: 5,
+            reconnectionAttempts: Infinity,
             reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
             timeout: 20000,
-            forceNew: false,
-            upgrade: true
+            forceNew: true
         });
 
+        // Simplified event handlers
         AppState.websocket.on('connect', () => {
-            console.log('✅ Socket.IO connected');
-            // Request initial update
             AppState.websocket.emit('request_update');
+            stopProgressUpdates(); // Stop polling when connected
         });
 
         AppState.websocket.on('update', (data) => {
-            console.log('📊 Received update via Socket.IO:', data);
-            // Data comes directly from server
-            if (data && data.status && data.data) {
-                // Stop polling since we have Socket.IO updates
+            if (data?.status && data?.data) {
                 stopProgressUpdates();
-                
-                // Update progress display if on progress page
-                if (AppState.currentPage === PAGES.PROGRESS) {
-                    updateProgressDisplay(data.status, data.data);
-                }
-                
-                // Update system state if on home page
-                if (AppState.currentPage === PAGES.HOME) {
-                    const state = data.status.state === 'idle' ? 'Idle' : data.status.state;
-                    updateSystemState(state);
-                }
-            } else {
-                console.warn('Invalid update data format:', data);
+                _handleStateUpdate(data.status, data.data);
             }
         });
 
         AppState.websocket.on('test_completed', () => {
-            // Test completed via Socket.IO
             stopProgressUpdates();
             disconnectWebSocket();
             showPage(PAGES.COMPLETION);
         });
 
-        AppState.websocket.on('connected', (data) => {
-            console.log('Socket.IO connected:', data);
-        });
-
         AppState.websocket.on('disconnect', () => {
-            console.log('Socket.IO disconnected - falling back to polling');
-            // Fallback to polling when Socket.IO disconnects
-            if (AppState.currentPage === PAGES.PROGRESS && !AppState.updateInterval) {
-                startProgressUpdates();
-            }
-            if (AppState.currentPage === PAGES.HOME && !AppState.statusInterval) {
-                startStatusUpdates();
-            }
+            _startPollingFallback();
         });
 
-        AppState.websocket.on('connect_error', (error) => {
-            console.error('Socket.IO connection error:', error);
-            // Fallback to polling if Socket.IO fails
-            if (AppState.currentPage === PAGES.PROGRESS && !AppState.updateInterval) {
-                startProgressUpdates();
-            }
-            if (AppState.currentPage === PAGES.HOME && !AppState.statusInterval) {
-                startStatusUpdates();
-            }
+        AppState.websocket.on('connect_error', () => {
+            _startPollingFallback();
         });
+
+        AppState.websocket.on('reconnect', () => {
+            AppState.websocket.emit('request_update');
+            stopProgressUpdates();
+        });
+
     } catch (error) {
-        console.error('Failed to create Socket.IO connection:', error);
-        // Fallback to polling
+        console.error('Socket.IO connection failed:', error);
+        _startPollingFallback();
+    }
+}
+
+/**
+ * Helper to handle state updates - centralized
+ */
+function _handleStateUpdate(status, data) {
+    if (AppState.currentPage === PAGES.PROGRESS) {
+        updateProgressDisplay(status, data);
+    } else if (AppState.currentPage === PAGES.HOME) {
+        const state = status.state === 'idle' ? 'Idle' : status.state;
+        updateSystemState(state);
+    }
+}
+
+/**
+ * Helper to start polling fallback - simplified
+ */
+function _startPollingFallback() {
+    if (AppState.websocket?.connected) {
+        return; // Don't poll if WebSocket is connected
+    }
+    
+    if (AppState.currentPage === PAGES.PROGRESS && !AppState.updateInterval) {
         startProgressUpdates();
+    } else if (AppState.currentPage === PAGES.HOME && !AppState.statusInterval) {
+        startStatusUpdates();
     }
 }
 
@@ -336,33 +356,77 @@ function connectWebSocket() {
  */
 function disconnectWebSocket() {
     if (AppState.websocket) {
-        AppState.websocket.close();
+        try {
+            AppState.websocket.removeAllListeners();
+            AppState.websocket.disconnect();
+        } catch (e) {
+            console.warn('Error disconnecting WebSocket:', e);
+        }
         AppState.websocket = null;
     }
 }
 
 /**
- * Start polling for progress updates (fallback if WebSocket unavailable)
- * Only used when Socket.IO is not connected
+ * Start polling for progress updates - simplified and robust
  */
 function startProgressUpdates() {
-    // Don't start polling if Socket.IO is connected
-    if (AppState.websocket && AppState.websocket.connected) {
-        console.log('Socket.IO connected - skipping polling');
+    // Don't poll if WebSocket is connected
+    if (AppState.websocket?.connected) {
         return;
     }
     
-    if (AppState.updateInterval) return;
+    // Don't start if already polling
+    if (AppState.updateInterval) {
+        return;
+    }
 
-    console.log('Starting polling fallback (Socket.IO not available)');
+    let errorCount = 0;
     AppState.updateInterval = setInterval(async () => {
-        if (AppState.currentPage === PAGES.PROGRESS) {
-            await fetchProgressData();
-        } else {
-            // Stop polling if we're not on progress page
+        // Stop if not on progress page
+        if (AppState.currentPage !== PAGES.PROGRESS) {
             stopProgressUpdates();
+            return;
         }
-    }, 1000); // Update every second
+        
+        // Stop if WebSocket connected
+        if (AppState.websocket?.connected) {
+            stopProgressUpdates();
+            return;
+        }
+        
+        try {
+            await fetchProgressData();
+            errorCount = 0; // Reset on success
+        } catch (error) {
+            errorCount++;
+            if (errorCount >= 5) {
+                // Try recovery after 5 consecutive errors
+                _attemptRecovery();
+                errorCount = 0;
+            }
+        }
+    }, 1000);
+}
+
+/**
+ * Helper to attempt recovery - simplified
+ */
+async function _attemptRecovery() {
+    try {
+        const response = await fetch('/api/test/recover', { method: 'POST' });
+        if (response.ok) {
+            const data = await response.json();
+            if (data.state === 'idle') {
+                stopProgressUpdates();
+                disconnectWebSocket();
+                showPage(PAGES.HOME);
+                updateSystemState('Idle');
+                alert('Test state was recovered. Please try again.');
+            }
+        }
+    } catch (e) {
+        console.error('Recovery failed:', e);
+    }
 }
 
 /**
@@ -380,29 +444,49 @@ function stopProgressUpdates() {
 }
 
 /**
- * Fetch progress data from API
+ * Fetch progress data from API - simplified
  */
 async function fetchProgressData() {
-    try {
-        const [statusResponse, dataResponse] = await Promise.all([
-            fetch('/api/test/status'),
-            fetch('/api/test/data')
-        ]);
+    const [statusResponse, dataResponse] = await Promise.all([
+        fetch('/api/test/status'),
+        fetch('/api/test/data')
+    ]);
 
-        if (statusResponse.ok && dataResponse.ok) {
-            const status = await statusResponse.json();
-            const data = await dataResponse.json();
-            updateProgressDisplay(status, data);
+    if (!statusResponse.ok || !dataResponse.ok) {
+        throw new Error('Failed to fetch status or data');
+    }
 
-            // Check if test completed
-            if (status.state === 'completed' && AppState.currentPage === PAGES.PROGRESS) {
-                stopProgressUpdates();
-                disconnectWebSocket();
-                showPage(PAGES.COMPLETION);
-            }
+    const status = await statusResponse.json();
+    const data = await dataResponse.json();
+    
+    // Check for stuck STARTING state (simplified)
+    if (status.state === 'starting') {
+        const now = Date.now();
+        if (!AppState.startingStateTime) {
+            AppState.startingStateTime = now;
+        } else if (now - AppState.startingStateTime > 5000) {
+            // Stuck for more than 5 seconds - attempt recovery
+            await _attemptRecovery();
+            AppState.startingStateTime = null;
+            return;
         }
-    } catch (error) {
-        console.error('Error fetching progress data:', error);
+    } else {
+        AppState.startingStateTime = null;
+    }
+    
+    // Update display
+    updateProgressDisplay(status, data);
+
+    // Handle state transitions
+    if (status.state === 'completed' && AppState.currentPage === PAGES.PROGRESS) {
+        stopProgressUpdates();
+        disconnectWebSocket();
+        showPage(PAGES.COMPLETION);
+    } else if (status.state === 'aborted' && AppState.currentPage === PAGES.PROGRESS) {
+        stopProgressUpdates();
+        disconnectWebSocket();
+        showPage(PAGES.HOME);
+        updateSystemState('Idle');
     }
 }
 

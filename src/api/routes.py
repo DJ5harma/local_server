@@ -69,124 +69,69 @@ def register_routes(app, manager: TestStateManager, sender):
     
     @app.route("/api/test/start", methods=["POST"])
     def start_test():
-        """Start a new test cycle"""
-        print("=" * 50)
-        print("🚀 START TEST ENDPOINT CALLED")
-        print("=" * 50)
-        import sys
-        sys.stdout.flush()  # Force flush output
-        
+        """Start a new test cycle - simplified and robust"""
         try:
-            print("📍 Step 1: Checking test_manager...")
-            sys.stdout.flush()
-            if test_manager is None:
-                print("❌ test_manager is None!")
+            # Validate manager
+            if not test_manager:
                 return jsonify({"error": "Test manager not initialized"}), 500
             
-            print("📍 Step 2: Getting current state...")
-            sys.stdout.flush()
-            current_state = test_manager.state
-            print(f"📊 Current state: {current_state}")
-            sys.stdout.flush()
+            # Check state - must be IDLE
+            if test_manager.state != TestState.IDLE:
+                return jsonify({
+                    "error": f"Test already running or not in idle state (current: {test_manager.state.value})"
+                }), 400
             
-            if current_state != TestState.IDLE:
-                print(f"⚠️  Test not in IDLE state: {current_state}")
-                return jsonify({"error": "Test already running or not in idle state"}), 400
-            
-            print("✅ State check passed, starting test...")
-            sys.stdout.flush()
-            print("📍 Step 3: Calling test_manager.start_test()...")
-            sys.stdout.flush()
-            start_result = test_manager.start_test()
-            print(f"📍 Step 3 result: {start_result}")
-            sys.stdout.flush()
-            
-            if not start_result:
-                print("❌ test_manager.start_test() returned False")
+            # Start test (sets state to STARTING)
+            if not test_manager.start_test():
                 return jsonify({"error": "Failed to start test"}), 400
             
-            print("✅ test_manager.start_test() succeeded")
-            sys.stdout.flush()
-            
-            # Generate t=0 data
-            print("📍 Step 4: Generating t=0 data...")
-            sys.stdout.flush()
+            # Generate and store t=0 data
             try:
                 t0_data = generate_t0_data()
-                print(f"✅ Generated t=0 data: {list(t0_data.keys())}")
-                sys.stdout.flush()
+                test_manager.set_test_data("t0_data", t0_data)
             except Exception as e:
-                print(f"❌ Error generating t=0 data: {e}")
-                import traceback
-                traceback.print_exc()
-                sys.stdout.flush()
-                raise
+                test_manager.reset_to_idle()
+                return jsonify({"error": f"Failed to generate test data: {str(e)}"}), 500
             
-            print("📍 Step 5: Storing t=0 data...")
-            sys.stdout.flush()
-            test_manager.set_test_data("t0_data", t0_data)
-            print("✅ Stored t=0 data")
-            sys.stdout.flush()
+            # Transition to RUNNING
+            test_manager.confirm_start()
             
-            # Send t=0 data to backend (non-blocking)
-            def send_t0_data_async():
+            # Start background tasks (non-blocking, errors are non-critical)
+            def background_tasks():
                 try:
-                    print("📤 Sending t=0 data to backend...")
+                    # Send t=0 data to backend
                     backend_sender.send_sludge_data(t0_data)
                 except Exception as e:
-                    print(f"⚠️  Failed to send t=0 data to backend (non-critical): {e}")
+                    print(f"⚠️  Backend send failed (non-critical): {e}")
+                
+                try:
+                    # Start periodic height updates
+                    send_periodic_updates(t0_data)
+                except Exception as e:
+                    print(f"⚠️  Periodic updates failed (non-critical): {e}")
             
-            # Send in background thread to avoid blocking
-            send_thread = threading.Thread(target=send_t0_data_async, daemon=True)
-            send_thread.start()
-            print("✅ Started background thread for backend send")
+            threading.Thread(target=background_tasks, daemon=True).start()
             
-            # Confirm test start
-            print("📍 Step 6: Confirming test start...")
-            sys.stdout.flush()
-            test_manager.confirm_start()
-            print(f"✅ Test confirmed, state: {test_manager.state}")
-            sys.stdout.flush()
+            # Emit state update
+            _emit_state_update()
             
-            # Prepare response FIRST before starting any background tasks
-            print("📍 Step 7: Preparing response...")
-            sys.stdout.flush()
-            result = {"success": True, "state": test_manager.state.value}
-            print(f"✅ Response data prepared: {result}")
-            sys.stdout.flush()
+            # Return success immediately
+            return jsonify({
+                "success": True,
+                "state": test_manager.state.value
+            })
             
-            # Start background task to send periodic height updates (don't wait for it)
-            print("📍 Step 8: Starting background threads...")
-            sys.stdout.flush()
-            print("🔄 Starting periodic updates thread...")
-            sys.stdout.flush()
-            try:
-                thread = threading.Thread(target=send_periodic_updates, args=(t0_data,), daemon=True)
-                thread.start()
-                print("✅ Periodic updates thread started (non-blocking)")
-                sys.stdout.flush()
-            except Exception as e:
-                print(f"⚠️  Failed to start periodic updates thread (non-critical): {e}")
-                import traceback
-                traceback.print_exc()
-                sys.stdout.flush()
-            
-            # Create response and return immediately
-            print("📍 Step 9: Creating JSON response...")
-            sys.stdout.flush()
-            response = jsonify(result)
-            print("📤 Response created, about to return...")
-            sys.stdout.flush()
-            print("=" * 50)
-            print("🚀 RETURNING RESPONSE NOW")
-            print("=" * 50)
-            sys.stdout.flush()
-            return response
         except Exception as e:
+            # Reset state on any error
+            try:
+                if test_manager and test_manager.state == TestState.STARTING:
+                    test_manager.reset_to_idle()
+            except:
+                pass
+            
             print(f"❌ Error starting test: {e}")
             import traceback
             traceback.print_exc()
-            print("=" * 50)
             return jsonify({"error": f"Internal error: {str(e)}"}), 500
     
     @app.route("/api/test/status", methods=["GET"])
@@ -224,11 +169,12 @@ def register_routes(app, manager: TestStateManager, sender):
     
     @app.route("/api/test/abort", methods=["POST"])
     def abort_test():
-        """Abort the currently running test"""
+        """Abort the currently running test - simplified"""
         if test_manager.state not in [TestState.STARTING, TestState.RUNNING]:
             return jsonify({"error": "No test running to abort"}), 400
         
         if test_manager.abort_test():
+            _emit_state_update()
             return jsonify({"success": True, "state": test_manager.state.value})
         else:
             return jsonify({"error": "Failed to abort test"}), 400
@@ -289,9 +235,47 @@ def register_routes(app, manager: TestStateManager, sender):
     
     @app.route("/api/test/reset", methods=["POST"])
     def reset_test():
-        """Reset test state to idle (after viewing results)"""
+        """Reset test state to idle - simplified"""
         test_manager.reset_to_idle()
+        _emit_state_update()
         return jsonify({"success": True, "state": test_manager.state.value})
+    
+    @app.route("/api/test/recover", methods=["POST"])
+    def recover_test():
+        """Recovery endpoint: reset stuck states"""
+        try:
+            current_state = test_manager.state
+            
+            # If stuck in STARTING, reset to IDLE
+            if current_state == TestState.STARTING:
+                print("🔄 Recovering from stuck STARTING state")
+                test_manager.reset_to_idle()
+                return jsonify({
+                    "success": True,
+                    "message": "Recovered from stuck STARTING state",
+                    "state": test_manager.state.value
+                })
+            
+            # If in RUNNING but no test data, something is wrong
+            if current_state == TestState.RUNNING:
+                t0_data = test_manager.get_test_data("t0_data")
+                if not t0_data:
+                    print("🔄 Recovering from RUNNING state without data")
+                    test_manager.reset_to_idle()
+                    return jsonify({
+                        "success": True,
+                        "message": "Recovered from invalid RUNNING state",
+                        "state": test_manager.state.value
+                    })
+            
+            return jsonify({
+                "success": True,
+                "message": "No recovery needed",
+                "state": current_state.value
+            })
+        except Exception as e:
+            print(f"❌ Error in recovery: {e}")
+            return jsonify({"error": str(e)}), 500
     
     @app.route("/api/debug/state", methods=["GET"])
     def debug_state():
@@ -349,77 +333,86 @@ def register_routes(app, manager: TestStateManager, sender):
 
 
 def send_periodic_updates(initial_data: Dict[str, Any]):
-    """Send periodic height updates during test"""
+    """Send periodic height updates during test - simplified and robust"""
     try:
-        print(f"🔄 [BACKGROUND] Starting periodic updates thread for test")
-        print(f"🔄 [BACKGROUND] Generating height history...")
+        # Generate height history once
         height_history = generate_height_history(
             initial_data, 
             Config.TEST_DURATION_MINUTES, 
             interval_seconds=10
         )
-        print(f"📊 [BACKGROUND] Generated {len(height_history)} height history entries")
+        print(f"📊 Generated {len(height_history)} height history entries")
     except Exception as e:
-        print(f"❌ [BACKGROUND] Error generating height history: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"❌ Error generating height history: {e}")
         return
+    
     start_time = time.time()
     
+    # Send updates every 10 seconds
     for i, entry in enumerate(height_history):
+        # Check if test is still running
         if test_manager.state != TestState.RUNNING:
-            print(f"⏹️  Test stopped, ending periodic updates")
             break
         
-        # Calculate when this entry should be sent (every 10 seconds)
+        # Wait until it's time for this update
         target_time = start_time + (i * 10)
-        current_time = time.time()
-        wait_seconds = target_time - current_time
-        
+        wait_seconds = max(0, target_time - time.time())
         if wait_seconds > 0:
             time.sleep(wait_seconds)
         
+        # Double-check state before storing
         if test_manager.state == TestState.RUNNING:
-            # Store height entry
             test_manager.add_height_entry(entry)
-            print(f"📏 Height update {i+1}/{len(height_history)}: {entry['height']:.2f}mm")
             
-            # NOTE: Periodic updates to production backend are disabled
-            # Only t=0 and t=30 data are sent to backend
-            # Uncomment below to re-enable periodic backend updates:
-            # backend_sender.send_height_update(
-            #     entry["height"],
-            #     entry["dateTime"],
-            #     entry.get("testType")
-            # )
-            
-            # Emit via SocketIO to local HMI (still works for local display)
+            # Emit via SocketIO (non-critical if it fails)
             if socketio:
                 try:
                     socketio.emit("height_update", {
-                        "height": entry["height"],
-                        "timestamp": entry["dateTime"]
-                    })
-                except Exception as e:
-                    print(f"⚠️  Error emitting height update: {e}")
-    
-    # Note: t30 data generation is handled by monitor_test() to avoid duplicates
-    # This function only sends periodic height updates during the test
+                        "height": entry.get("height"),
+                        "timestamp": entry.get("dateTime")
+                    }, namespace='/', broadcast=True)
+                except Exception:
+                    pass  # Non-critical
 
 
 def get_test_data_sync() -> Dict[str, Any]:
-    """Synchronous version for WebSocket"""
-    t0_data = test_manager.get_test_data("t0_data")
-    t30_data = test_manager.get_test_data("t30_data")
-    height_history = test_manager.get_height_history()
+    """Get test data synchronously - simplified and robust"""
+    try:
+        t0_data = test_manager.get_test_data("t0_data")
+        t30_data = test_manager.get_test_data("t30_data")
+        height_history = test_manager.get_height_history()
+        
+        latest_height = None
+        if height_history:
+            latest_height = height_history[-1].get("height")
+        
+        return {
+            "t0_data": t0_data,
+            "t30_data": t30_data,
+            "latest_height": latest_height,
+            "height_history": height_history[-10:] if height_history else []
+        }
+    except Exception as e:
+        print(f"⚠️  Error getting test data: {e}")
+        return {
+            "t0_data": None,
+            "t30_data": None,
+            "latest_height": None,
+            "height_history": []
+        }
+
+
+def _emit_state_update():
+    """Helper to emit state update via SocketIO - simplified and robust"""
+    if not socketio or not test_manager:
+        return
     
-    latest_height = None
-    if height_history:
-        latest_height = height_history[-1]["height"]
-    
-    return {
-        "t0_data": t0_data,
-        "t30_data": t30_data,
-        "latest_height": latest_height,
-        "height_history": height_history[-10:] if height_history else []
-    }
+    try:
+        status = test_manager.get_status_dict()
+        test_data = get_test_data_sync()
+        socketio.emit("update", {
+            "status": status,
+            "data": test_data
+        }, namespace='/', broadcast=True)
+    except Exception as e:
+        print(f"⚠️  Failed to emit state update: {e}")
