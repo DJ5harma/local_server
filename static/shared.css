@@ -48,6 +48,8 @@ body {
     align-items: center;
     padding: 1rem;
     overflow-y: auto;
+    transform: rotate(180deg);
+    /* transform: rotate(0deg); */
 }
 
 .page-content {
