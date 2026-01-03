@@ -235,10 +235,36 @@ def register_routes(app, manager: TestStateManager, sender):
     
     @app.route("/api/test/reset", methods=["POST"])
     def reset_test():
-        """Reset test state to idle - simplified"""
-        test_manager.reset_to_idle()
-        _emit_state_update()
-        return jsonify({"success": True, "state": test_manager.state.value})
+        """Reset test state to idle - simplified and robust"""
+        try:
+            # Force reset to idle (handles any state)
+            test_manager.reset_to_idle()
+            
+            # Verify state is actually idle
+            final_state = test_manager.state
+            if final_state != TestState.IDLE:
+                print(f"⚠️  Warning: Reset did not result in IDLE state, got: {final_state}")
+                # Force it again
+                test_manager.reset_to_idle()
+                final_state = test_manager.state
+            
+            # Emit state update immediately
+            _emit_state_update()
+            
+            return jsonify({
+                "success": True,
+                "state": final_state.value
+            })
+        except Exception as e:
+            print(f"❌ Error in reset_test: {e}")
+            import traceback
+            traceback.print_exc()
+            # Try to reset anyway
+            try:
+                test_manager.reset_to_idle()
+            except:
+                pass
+            return jsonify({"error": str(e)}), 500
     
     @app.route("/api/test/recover", methods=["POST"])
     def recover_test():
