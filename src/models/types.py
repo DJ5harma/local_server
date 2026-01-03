@@ -41,11 +41,6 @@ class SludgeHeightEntry(TypedDict):
     testType: Optional[str]
 
 
-class LoginRequest(TypedDict):
-    """Login request payload"""
-    password: str
-
-
 class TestResult(TypedDict):
     """Test result structure"""
     test_status: str

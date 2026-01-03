@@ -2,12 +2,15 @@
 Backend client for sending data to the backend server via Socket.IO.
 Matches the data format from backend/scripts/dataSender.ts
 """
+import logging
 import socketio
 import socketio.exceptions
 from typing import Dict, Any, Optional
 from datetime import datetime
 from ..config import Config
 from ..utils.results_storage import save_sludge_data, save_height_update
+
+logger = logging.getLogger(__name__)
 
 
 class BackendSender:
@@ -34,17 +37,17 @@ class BackendSender:
     def _on_connect(self):
         """Handle connection event"""
         self.connected = True
-        print(f"✅ Connected to backend at {self.backend_url}")
-        print(f"   Socket ID: {self.sio.sid if hasattr(self.sio, 'sid') else 'N/A'}")
+        logger.info(f"Connected to backend at {self.backend_url}")
+        logger.info(f"   Socket ID: {self.sio.sid if hasattr(self.sio, 'sid') else 'N/A'}")
     
     def _on_disconnect(self):
         """Handle disconnection event"""
         self.connected = False
-        print(f"⚠️  Disconnected from backend")
+        logger.warning("Disconnected from backend")
     
     def _on_error(self, error):
         """Handle error event"""
-        print(f"❌ Backend connection error: {error}")
+        logger.error(f"Backend connection error: {error}")
     
     def connect(self) -> bool:
         """
@@ -75,7 +78,7 @@ class BackendSender:
             return True
         except Exception as e:
             # Connection failed - that's OK, we'll try again later
-            print(f"⚠️  Backend connection attempt failed (non-critical): {e}")
+            logger.warning(f"Backend connection attempt failed (non-critical): {e}")
             return False
     
     def disconnect(self):
@@ -104,11 +107,11 @@ class BackendSender:
             
             # Save to local results folder (always save locally, even if backend fails)
             save_sludge_data(data_with_factory)
-            print(f"💾 Saved sludge-data locally: t={data.get('t_min', '?')}min, testId={data.get('testId', 'N/A')}")
+            logger.info(f"Saved sludge-data locally: t={data.get('t_min', '?')}min, testId={data.get('testId', 'N/A')}")
             
             # Try to connect if not connected
             if not self.connected:
-                print(f"🔌 Attempting to connect to backend at {self.backend_url}...")
+                logger.info(f"Attempting to connect to backend at {self.backend_url}...")
                 try:
                     is_production = self.backend_url.startswith("https://")
                     # For production HTTPS, prefer polling (more reliable through proxies)
@@ -127,43 +130,42 @@ class BackendSender:
                     time.sleep(0.3)
                     
                     if not self.connected:
-                        print(f"⚠️  Backend connection timeout - connection not established")
-                        print(f"   Data saved locally and will be retried on next connection")
+                        logger.warning("Backend connection timeout - connection not established")
+                        logger.info("   Data saved locally and will be retried on next connection")
                         return False
                 except socketio.exceptions.ConnectionError as e:
                     # Connection failed - this is expected if backend is down
-                    print(f"⚠️  Backend connection failed: {str(e)}")
-                    print(f"   Data saved locally and will be retried on next connection")
+                    logger.warning(f"Backend connection failed: {str(e)}")
+                    logger.info("   Data saved locally and will be retried on next connection")
                     return False
                 except Exception as e:
                     # Other errors (network, SSL, etc.)
-                    print(f"⚠️  Backend connection error: {str(e)}")
-                    print(f"   Data saved locally and will be retried on next connection")
+                    logger.warning(f"Backend connection error: {str(e)}")
+                    logger.info("   Data saved locally and will be retried on next connection")
                     return False
             
             # If connected, try to send
             if self.connected:
-                print(f"📤 Emitting sludge-data event to backend...")
-                print(f"   Data keys: {list(data_with_factory.keys())}")
-                print(f"   Test ID: {data_with_factory.get('testId', 'N/A')}")
-                print(f"   t_min: {data_with_factory.get('t_min', 'N/A')}")
-                print(f"   Factory: {data_with_factory.get('factoryCode', 'N/A')}")
+                logger.info("Emitting sludge-data event to backend...")
+                logger.debug(f"   Data keys: {list(data_with_factory.keys())}")
+                logger.debug(f"   Test ID: {data_with_factory.get('testId', 'N/A')}")
+                logger.debug(f"   t_min: {data_with_factory.get('t_min', 'N/A')}")
+                logger.debug(f"   Factory: {data_with_factory.get('factoryCode', 'N/A')}")
                 
                 try:
                     self.sio.emit("sludge-data", data_with_factory)
-                    print(f"✅ Sent sludge-data to backend: t={data.get('t_min', '?')}min, testId={data.get('testId', 'N/A')}")
+                    logger.info(f"Sent sludge-data to backend: t={data.get('t_min', '?')}min, testId={data.get('testId', 'N/A')}")
                     return True
                 except Exception as e:
-                    print(f"⚠️  Failed to emit data (connection may have dropped): {str(e)}")
+                    logger.warning(f"Failed to emit data (connection may have dropped): {str(e)}")
                     self.connected = False  # Mark as disconnected
                     return False
             else:
-                print(f"⚠️  Not connected to backend - data saved locally only")
+                logger.warning("Not connected to backend - data saved locally only")
                 return False
                 
         except Exception as e:
-            print(f"❌ Unexpected error sending sludge-data: {str(e)}")
-            # Don't print full traceback for expected connection errors
+            logger.error(f"Unexpected error sending sludge-data: {str(e)}")
             return False
     
     def send_height_update(self, height_mm: float, timestamp: Optional[str] = None, test_type: Optional[str] = None) -> bool:
@@ -206,7 +208,7 @@ class BackendSender:
             # Still return True since local save succeeded
             return True
         except Exception as e:
-            print(f"❌ Failed to send height update: {e}")
+            logger.error(f"Failed to send height update: {e}")
             return False
     
     def send_test_warning(self, message: str, error_details: Optional[str] = None, 
@@ -245,10 +247,10 @@ class BackendSender:
                 warning_data["testType"] = test_type
             
             self.sio.emit("test-warning", warning_data)
-            print(f"⚠️  Sent test warning: {message}")
+            logger.warning(f"Sent test warning: {message}")
             return True
         except Exception as e:
-            print(f"❌ Failed to send test warning: {e}")
+            logger.error(f"Failed to send test warning: {e}")
             return False
 
 

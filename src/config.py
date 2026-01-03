@@ -18,12 +18,9 @@ class Config:
     PORT: int = int(os.getenv("PORT", "5000"))
     HOST: str = os.getenv("HOST", "0.0.0.0")
     
-    # Authentication
-    LOGIN_PASSWORD: str = os.getenv("LOGIN_PASSWORD", "thermax")
-    
     # Test Configuration
     # Can be fractional (e.g., 0.1 = 6 seconds, 0.5 = 30 seconds) for testing
-    TEST_DURATION_MINUTES: float = float(os.getenv("TEST_DURATION_MINUTES", "30"))
+    TEST_DURATION_MINUTES: float = float(os.getenv("TEST_DURATION_MINUTES", "31"))
     
     # Backend Configuration
     BACKEND_URL: str = os.getenv("BACKEND_URL", "http://localhost:4000")

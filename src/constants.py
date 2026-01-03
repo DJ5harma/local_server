@@ -1,0 +1,40 @@
+"""
+Application constants for the SV30 Test System HMI server.
+"""
+
+# Test Configuration
+DEFAULT_TEST_DURATION_MINUTES = 31.0
+DEFAULT_HEIGHT_UPDATE_INTERVAL_SECONDS = 10
+MAX_STARTING_STATE_TIME_SECONDS = 30
+
+# State Recovery
+STUCK_STARTING_STATE_TIMEOUT_SECONDS = 5  # Frontend timeout for stuck STARTING state
+
+# WebSocket Configuration
+WEBSOCKET_UPDATE_INTERVAL_SECONDS = 1
+WEBSOCKET_PING_TIMEOUT = 60
+WEBSOCKET_PING_INTERVAL = 25
+
+# Polling Configuration
+STATUS_POLLING_INTERVAL_SECONDS = 2
+PROGRESS_POLLING_INTERVAL_SECONDS = 1
+MAX_CONSECUTIVE_ERRORS = 5
+
+# Test Type Time Ranges (hours 0-23)
+MORNING_START_HOUR = 6
+MORNING_END_HOUR = 12
+AFTERNOON_START_HOUR = 12
+AFTERNOON_END_HOUR = 18
+# Evening: 18-23 and 0-5
+
+# Test Type Codes
+TEST_TYPE_MORNING = "M"
+TEST_TYPE_AFTERNOON = "A"
+TEST_TYPE_EVENING = "E"
+
+# API Response Messages
+MSG_TEST_STARTED = "Test started successfully"
+MSG_TEST_ABORTED = "Test aborted successfully"
+MSG_TEST_RESET = "Test reset to idle"
+MSG_RECOVERY_SUCCESS = "State recovered successfully"
+

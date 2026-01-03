@@ -1,16 +1,34 @@
 """
 Main Flask application for SV30 Test System HMI.
+
+This module sets up the Flask application, initializes services,
+and configures routes. It uses dependency injection to wire
+components together.
 """
-import threading
-from flask import Flask, send_from_directory, request, Response
+import logging
+from flask import Flask, send_from_directory, request, Response, redirect, url_for
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 
 from .config import Config
-from .models import TestStateManager, TestState
+from .models import TestStateManager
 from .services import get_backend_sender
+from .services.dummy_data_provider import DummyDataProvider
+from .services.test_service import TestService
+from .services.test_monitor import TestMonitor
 from .api.routes import init_routes, register_routes
 from .api.websocket import init_websocket, start_update_broadcast
+from .constants import (
+    WEBSOCKET_PING_TIMEOUT,
+    WEBSOCKET_PING_INTERVAL,
+)
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # Validate configuration
 Config.validate()
@@ -37,177 +55,113 @@ socketio = SocketIO(
     async_mode='threading',
     logger=False,
     engineio_logger=False,
-    ping_timeout=60,
-    ping_interval=25
+    ping_timeout=WEBSOCKET_PING_TIMEOUT,
+    ping_interval=WEBSOCKET_PING_INTERVAL
 )
 
-# Initialize test state manager
+# Initialize core components
 test_manager = TestStateManager(test_duration_minutes=Config.TEST_DURATION_MINUTES)
-
-# Initialize backend sender (don't connect yet - will connect on first use)
 backend_sender = get_backend_sender()
-print(f"📡 Backend sender initialized")
-print(f"   Backend URL: {Config.BACKEND_URL}")
-print(f"   Factory Code: {Config.FACTORY_CODE}")
-print(f"   (Will connect when sending first data)")
 
-# Root route - serve index.html
+# Initialize data provider (can be easily swapped with ML model implementation)
+data_provider = DummyDataProvider()
+
+# Initialize test service
+test_service = TestService(
+    test_manager=test_manager,
+    data_provider=data_provider,
+    backend_sender=backend_sender
+)
+
+# Initialize test monitor
+test_monitor = TestMonitor(
+    test_manager=test_manager,
+    test_service=test_service,
+    socketio=socketio
+)
+
+logger.info("Backend sender initialized")
+logger.info(f"   Backend URL: {Config.BACKEND_URL}")
+logger.info(f"   Factory Code: {Config.FACTORY_CODE}")
+logger.info("   (Will connect when sending first data)")
+
+# Root route - redirect to home
 @app.route("/")
 def root():
-    """Serve the main HMI interface"""
+    """Root route - redirect to home page"""
+    return redirect("/home")
+
+# Route for serving HTML pages
+@app.route("/<page>")
+def serve_page(page: str):
+    """
+    Serve HTML pages for the HMI interface.
+    
+    Args:
+        page: Page name (home, start, progress, completion, result)
+    """
+    valid_pages = ["home", "start", "progress", "completion", "result"]
+    
+    if page not in valid_pages:
+        return Response(f"Page not found: {page}", status=404, mimetype='text/plain')
+    
     try:
-        print(f"📄 Serving index.html from {Config.STATIC_DIR}")
-        response = send_from_directory(Config.STATIC_DIR, "index.html")
+        # Serve individual HTML files
+        html_file = f"{page}.html"
+        response = send_from_directory(Config.STATIC_DIR, html_file)
         response.headers['Content-Type'] = 'text/html; charset=utf-8'
         return response
     except Exception as e:
-        print(f"❌ Error serving index.html: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Error serving page {page}: {e}")
         return Response(f"Error loading page: {str(e)}", status=500, mimetype='text/plain')
-
-
-# Background task for test monitoring
-def monitor_test():
-    """Background task to monitor test progress and trigger completion"""
-    import time
-    last_state = None
-    starting_state_time = None
-    MAX_STARTING_TIME = 30  # If stuck in STARTING for 30 seconds, reset to IDLE
-    
-    while True:
-        try:
-            time.sleep(1)  # Check every second
-            
-            current_state = test_manager.state
-            
-            # Detect state changes
-            if current_state != last_state:
-                print(f"🔄 State changed: {last_state} -> {current_state}")
-                last_state = current_state
-                
-                # Track when we enter STARTING state
-                if current_state == TestState.STARTING:
-                    starting_state_time = time.time()
-                else:
-                    starting_state_time = None
-            
-            # Recovery: If stuck in STARTING state for too long, reset to IDLE
-            if current_state == TestState.STARTING and starting_state_time:
-                elapsed = time.time() - starting_state_time
-                if elapsed > MAX_STARTING_TIME:
-                    print(f"⚠️  Test stuck in STARTING state for {elapsed:.1f}s, resetting to IDLE")
-                    test_manager.reset_to_idle()
-                    last_state = TestState.IDLE
-                    starting_state_time = None
-                    # Emit state update
-                    if socketio:
-                        try:
-                            status = test_manager.get_status_dict()
-                            from .api.routes import get_test_data_sync
-                            test_data = get_test_data_sync()
-                            socketio.emit("update", {
-                                "status": status,
-                                "data": test_data
-                            }, namespace='/')
-                        except:
-                            pass
-            
-            # Monitor running tests
-            if current_state == TestState.RUNNING:
-                if test_manager.is_test_complete():
-                    test_manager.complete_test()
-                    print("✅ Test completed after 30 minutes")
-                    
-                    # Generate and send t30 data to backend
-                    t0_data = test_manager.get_test_data("t0_data")
-                    if t0_data:
-                        def generate_and_send_t30():
-                            try:
-                                # Use absolute imports to avoid relative import issues in threads
-                                from src.services import generate_t30_data
-                                from src.services import get_backend_sender
-                                from src.config import Config
-                                
-                                print("🔬 Generating t=30 data after completion...")
-                                t30_data = generate_t30_data(t0_data, Config.TEST_DURATION_MINUTES)
-                                test_manager.set_test_data("t30_data", t30_data)
-                                
-                                print("📤 Sending t=30 data to backend...")
-                                sender = get_backend_sender()
-                                sender.send_sludge_data(t30_data)
-                                print("✅ t=30 data sent to backend")
-                            except Exception as e:
-                                print(f"⚠️  Error generating/sending t=30 data: {e}")
-                                import traceback
-                                traceback.print_exc()
-                        
-                        # Send in background thread
-                        t30_thread = threading.Thread(target=generate_and_send_t30, daemon=True)
-                        t30_thread.start()
-                    
-                    # Emit completion event via SocketIO
-                    try:
-                        socketio.emit("test_completed", {"type": "test_completed"}, namespace='/')
-                    except Exception as e:
-                        print(f"⚠️  Error emitting completion event: {e}")
-        except Exception as e:
-            print(f"⚠️  Error in monitor_test: {e}")
-            import traceback
-            traceback.print_exc()
-            time.sleep(1)
-
 
 # WebSocket events
 @socketio.on('connect')
 def handle_connect():
     """Handle WebSocket connection"""
-    print("✅ WebSocket client connected")
+    logger.info("WebSocket client connected")
     emit('connected', {'status': 'connected'})
 
 
 @socketio.on('disconnect')
 def handle_disconnect():
     """Handle WebSocket disconnection"""
-    print("⚠️  WebSocket client disconnected")
+    logger.info("WebSocket client disconnected")
 
 
 @socketio.on('request_update')
 def handle_update_request():
     """Handle update request from client"""
-    from .api.routes import get_test_data_sync
     try:
-        status = test_manager.get_status_dict()
-        test_data = get_test_data_sync()
+        status = test_service.get_test_status()
+        test_data = test_service.get_test_data()
         
         emit('update', {
             "status": status,
             "data": test_data
         })
     except Exception as e:
-        print(f"⚠️  Error handling update request: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Error handling update request: {e}")
 
+# Initialize routes and websocket with dependencies
+init_routes(test_service, socketio)
+init_websocket(test_service, socketio)
+register_routes(app)
 
-# Initialize routes and websocket with dependencies (after route definitions)
-init_routes(test_manager, backend_sender)
-init_websocket(test_manager, socketio)
-register_routes(app, test_manager, backend_sender)
+# Start background services
+test_monitor.start()
 start_update_broadcast()
 
-# Start background monitoring thread
-monitor_thread = threading.Thread(target=monitor_test, daemon=True)
-monitor_thread.start()
+logger.info("Application initialized successfully")
 
 
 if __name__ == "__main__":
     index_path = Config.STATIC_DIR / "index.html"
-    print(f"🚀 SV30 Test System HMI starting on http://{Config.HOST}:{Config.PORT}")
-    print(f"📁 Static files: {Config.STATIC_DIR}")
-    print(f"📄 Index file: {'✅ Found' if index_path.exists() else '❌ Missing'}")
-    print(f"✅ Backend: {Config.BACKEND_URL}")
-    print(f"🏭 Factory: {Config.FACTORY_CODE}")
+    logger.info(f"SV30 Test System HMI starting on http://{Config.HOST}:{Config.PORT}")
+    logger.info(f"Static files: {Config.STATIC_DIR}")
+    logger.info(f"Index file: {'Found' if index_path.exists() else 'Missing'}")
+    logger.info(f"Backend: {Config.BACKEND_URL}")
+    logger.info(f"Factory: {Config.FACTORY_CODE}")
     
     # Run Flask app with SocketIO
     socketio.run(
@@ -215,5 +169,6 @@ if __name__ == "__main__":
         host=Config.HOST,
         port=Config.PORT,
         debug=False,
-        allow_unsafe_werkzeug=True
+        allow_unsafe_werkzeug=True,
+        use_reloader=False
     )

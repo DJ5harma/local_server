@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SV30 Test System - Test Running</title>
+    <link rel="stylesheet" href="/static/shared.css">
+</head>
+<body>
+    <div class="page-content">
+        <h1 class="page-title">SV30 Test Running</h1>
+        <div class="status-section">
+            <div class="status-item">
+                <span class="status-label">Status:</span>
+                <span class="status-value status-running">Experiment in progress</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Time Remaining:</span>
+                <span class="status-value" id="time-remaining">31:00</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Sludge Height:</span>
+                <span class="status-value" id="current-height">-- mm</span>
+            </div>
+        </div>
+        
+        <!-- Progress Bar -->
+        <div class="progress-container">
+            <div class="progress-label">
+                <span>Test Progress</span>
+                <span id="progress-percentage">0%</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill"></div>
+            </div>
+        </div>
+        
+        <p class="instruction-text">Please do not disturb the setup.</p>
+        <div class="button-group">
+            <button id="abort-test-btn" class="btn btn-danger btn-large">Abort Test</button>
+        </div>
+    </div>
+
+    <script src="/static/socket.io.min.js"></script>
+    <script type="module" src="/static/js/progress.js"></script>
+</body>
+</html>

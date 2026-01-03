@@ -1,18 +1,28 @@
 """
 WebSocket handler for real-time test updates (Flask-SocketIO version).
 """
-from ..models import TestStateManager
-from .routes import get_test_data_sync
+import logging
+import time
+import threading
+from typing import Optional, Dict, Any
 
-# Global instance (will be injected)
-test_manager: TestStateManager = None
-socketio = None
+logger = logging.getLogger(__name__)
+
+# Global instances (will be injected)
+test_service = None
+socketio: Optional[object] = None
 
 
-def init_websocket(manager: TestStateManager, sio):
-    """Initialize WebSocket handler with dependencies"""
-    global test_manager, socketio
-    test_manager = manager
+def init_websocket(service, sio):
+    """
+    Initialize WebSocket handler with dependencies.
+    
+    Args:
+        service: TestService instance
+        sio: SocketIO instance
+    """
+    global test_service, socketio
+    test_service = service
     socketio = sio
     
     # Update routes module to have socketio reference
@@ -22,23 +32,22 @@ def init_websocket(manager: TestStateManager, sio):
 
 def start_update_broadcast():
     """Start broadcasting updates periodically"""
-    import time
-    import threading
-    
     def broadcast_loop():
         last_state = None
         while True:
             try:
-                time.sleep(1)  # Update every second
+                time.sleep(1)  # Update every second for smooth updates
                 
-                if test_manager and socketio:
-                    status = test_manager.get_status_dict()
+                if test_service and socketio:
+                    status = test_service.get_test_status()
+                    # Import lazily to avoid circular import
+                    from .routes import get_test_data_sync
                     test_data = get_test_data_sync()
                     current_state = status.get("state", "unknown")
                     
                     # Always emit update, but log state changes
                     if current_state != last_state:
-                        print(f"🔄 State changed: {last_state} -> {current_state}")
+                        logger.info(f"State changed: {last_state} -> {current_state}")
                         last_state = current_state
                     
                     # Emit update to all connected clients (broadcast by default in Flask-SocketIO)
@@ -48,20 +57,18 @@ def start_update_broadcast():
                             "data": test_data
                         }, namespace='/')
                     except Exception as e:
-                        print(f"⚠️  Error emitting update: {e}")
+                        logger.warning(f"Error emitting update: {e}")
                     
                     # Check if test completed
                     if current_state == "completed":
                         try:
                             socketio.emit("test_completed", {"type": "test_completed"}, namespace='/')
                         except Exception as e:
-                            print(f"⚠️  Error emitting completion: {e}")
+                            logger.warning(f"Error emitting completion: {e}")
             except Exception as e:
-                print(f"⚠️  Error in broadcast loop: {e}")
-                import traceback
-                traceback.print_exc()
+                logger.error(f"Error in broadcast loop: {e}")
                 time.sleep(1)
     
     thread = threading.Thread(target=broadcast_loop, daemon=True)
     thread.start()
-    print("✅ Started WebSocket broadcast thread")
+    logger.info("Started WebSocket broadcast thread")

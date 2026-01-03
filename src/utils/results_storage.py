@@ -1,11 +1,14 @@
 """
 Utility functions for storing test results locally.
 """
+import logging
 import json
 from pathlib import Path
 from typing import Dict, Any, Optional
 from datetime import datetime
 from ..config import Config
+
+logger = logging.getLogger(__name__)
 
 
 def ensure_results_dir() -> Path:
@@ -57,12 +60,10 @@ def save_sludge_data(data: Dict[str, Any]) -> Optional[str]:
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
         
-        print(f"💾 Saved sludge data to: {filepath}")
+        logger.info(f"Saved sludge data to: {filepath}")
         return str(filepath)
     except Exception as e:
-        print(f"⚠️  Failed to save sludge data: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Failed to save sludge data: {e}")
         return None
 
 
@@ -117,9 +118,9 @@ def save_height_update(height_mm: float, timestamp: Optional[str] = None,
         with open(filepath, 'a', encoding='utf-8') as f:
             f.write(json.dumps(update_entry, ensure_ascii=False) + '\n')
         
-        # Only print occasionally to avoid spam
+        # Return path (logging is done at higher level to avoid spam)
         return str(filepath)
     except Exception as e:
-        print(f"⚠️  Failed to save height update: {e}")
+        logger.error(f"Failed to save height update: {e}")
         return None
 

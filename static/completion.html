@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SV30 Test System - Test Result</title>
+    <link rel="stylesheet" href="/static/shared.css">
+</head>
+<body>
+    <div class="page-content">
+        <h1 class="page-title">SV30 Test Result</h1>
+        
+        <!-- Loading State -->
+        <div id="loading-state">
+            <p class="message-text">Loading test results...</p>
+        </div>
+        
+        <!-- Results Section -->
+        <div class="result-section" id="result-section" style="display: none;">
+            <div class="result-item">
+                <span class="result-label">Test Status:</span>
+                <span class="result-value">Completed</span>
+            </div>
+            <div class="result-item">
+                <span class="result-label">Test Duration:</span>
+                <span class="result-value" id="result-duration">31 minutes</span>
+            </div>
+            <div class="result-item">
+                <span class="result-label">Sludge height:</span>
+                <span class="result-value" id="result-sludge-height">-- mm</span>
+            </div>
+            <div class="result-item">
+                <span class="result-label">SV30 Value:</span>
+                <span class="result-value result-highlight" id="result-sv30">-- %</span>
+            </div>
+        </div>
+        
+        <p class="note-text" id="note-text" style="display: none;">This result is displayed once for operator reference.</p>
+        <div class="button-group">
+            <button id="home-from-completion-btn" class="btn btn-primary btn-large">Home page</button>
+        </div>
+    </div>
+
+    <script src="/static/socket.io.min.js"></script>
+    <script type="module" src="/static/js/completion.js"></script>
+</body>
+</html>

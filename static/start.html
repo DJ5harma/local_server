@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SV30 Test System - Start Experiment</title>
+    <link rel="stylesheet" href="/static/shared.css">
+</head>
+<body>
+    <div class="page-content">
+        <h1 class="page-title">Start Experiment</h1>
+        <p class="instruction-text">The system is ready to start recording the SV30 experiment.</p>
+        <div class="info-box">
+            <p class="info-text">Test duration: 31 minutes</p>
+        </div>
+        <p class="prompt-text">Start the SV30 test now?</p>
+        <div class="button-group">
+            <button id="start-test-btn" class="btn btn-primary btn-large">YES – Start Test</button>
+            <button id="cancel-start-btn" class="btn btn-secondary btn-large">Cancel - Home page</button>
+        </div>
+    </div>
+
+    <script src="/static/socket.io.min.js"></script>
+    <script type="module" src="/static/js/start.js"></script>
+</body>
+</html>
+
