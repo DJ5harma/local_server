@@ -109,7 +109,7 @@ def monitor_test():
                             socketio.emit("update", {
                                 "status": status,
                                 "data": test_data
-                            }, namespace='/', broadcast=True)
+                            }, namespace='/')
                         except:
                             pass
             
@@ -148,7 +148,7 @@ def monitor_test():
                     
                     # Emit completion event via SocketIO
                     try:
-                        socketio.emit("test_completed", {"type": "test_completed"}, namespace='/', broadcast=True)
+                        socketio.emit("test_completed", {"type": "test_completed"}, namespace='/')
                     except Exception as e:
                         print(f"⚠️  Error emitting completion event: {e}")
         except Exception as e:

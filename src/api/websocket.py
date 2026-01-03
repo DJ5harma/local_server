@@ -41,19 +41,19 @@ def start_update_broadcast():
                         print(f"🔄 State changed: {last_state} -> {current_state}")
                         last_state = current_state
                     
-                    # Emit update to all connected clients
+                    # Emit update to all connected clients (broadcast by default in Flask-SocketIO)
                     try:
                         socketio.emit("update", {
                             "status": status,
                             "data": test_data
-                        }, namespace='/', broadcast=True)
+                        }, namespace='/')
                     except Exception as e:
                         print(f"⚠️  Error emitting update: {e}")
                     
                     # Check if test completed
                     if current_state == "completed":
                         try:
-                            socketio.emit("test_completed", {"type": "test_completed"}, namespace='/', broadcast=True)
+                            socketio.emit("test_completed", {"type": "test_completed"}, namespace='/')
                         except Exception as e:
                             print(f"⚠️  Error emitting completion: {e}")
             except Exception as e:

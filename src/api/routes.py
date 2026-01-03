@@ -370,7 +370,7 @@ def send_periodic_updates(initial_data: Dict[str, Any]):
                     socketio.emit("height_update", {
                         "height": entry.get("height"),
                         "timestamp": entry.get("dateTime")
-                    }, namespace='/', broadcast=True)
+                    }, namespace='/')
                 except Exception:
                     pass  # Non-critical
 
@@ -413,6 +413,6 @@ def _emit_state_update():
         socketio.emit("update", {
             "status": status,
             "data": test_data
-        }, namespace='/', broadcast=True)
+        }, namespace='/')
     except Exception as e:
         print(f"⚠️  Failed to emit state update: {e}")
