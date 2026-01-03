@@ -1,0 +1,18 @@
+[Unit]
+Description=Thermax SV30 Test System HMI Server
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/ThermaxDashboard/local_server
+Environment="PATH=/home/pi/ThermaxDashboard/local_server/venv/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/home/pi/ThermaxDashboard/local_server/venv/bin/python /home/pi/ThermaxDashboard/local_server/run.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+

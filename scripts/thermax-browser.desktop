@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Thermax HMI Browser
+Comment=Open Thermax HMI in Chromium browser
+Exec=/bin/bash -c 'sleep 10 && for i in {1..30}; do if nc -z localhost 5000 2>/dev/null; then break; fi; sleep 1; done && chromium-browser --kiosk --noerrdialogs --disable-infobars http://localhost:5000'
+Icon=chromium-browser
+Terminal=false
+Categories=Network;WebBrowser;
+X-GNOME-Autostart-enabled=true
+
