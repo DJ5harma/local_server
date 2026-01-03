@@ -1,4 +1,3 @@
-HI
 # Raspberry Pi Auto-Start Setup Guide
 
 This guide will help you set up the Thermax HMI server to automatically start when your Raspberry Pi boots up, and automatically open Chromium browser to `http://localhost:5000` in kiosk mode.
@@ -114,11 +113,44 @@ sudo systemctl stop thermax-hmi.service
 # Restart server
 sudo systemctl restart thermax-hmi.service
 
-# Close browser (from SSH/terminal)
-pkill chromium-browser
-
 # Launch browser manually
 ./scripts/launch_browser.sh
+```
+
+### Closing the Browser
+
+The browser runs in kiosk mode (fullscreen), so you need specific methods to close it:
+
+**Method 1: Keyboard (if connected)**
+- Press `Alt+F4` to close the browser window
+
+**Method 2: Simple Kill (from SSH/terminal)**
+```bash
+pkill chromium-browser
+```
+
+**Method 3: Use Close Script (Recommended)**
+```bash
+./scripts/close_browser.sh
+```
+This script tries multiple methods to ensure the browser closes completely.
+
+**Method 4: Force Kill All Variants (if above don't work)**
+```bash
+# Kill all Chromium process variants
+pkill -9 chromium-browser
+pkill -9 chromium
+pkill -9 chrome
+killall -9 chromium-browser 2>/dev/null
+killall -9 chromium 2>/dev/null
+killall -9 chrome 2>/dev/null
+```
+
+**Verify Browser is Closed**
+```bash
+# Check if any Chromium processes are still running
+pgrep -i chromium chrome
+# Should return nothing if all processes are closed
 ```
 
 ### Disable Auto-Start
@@ -230,11 +262,12 @@ sudo systemctl restart thermax-hmi.service
 
 ### Change Startup Delay
 
-Edit `scripts/open_browser.sh` to adjust the wait time before opening the browser.
+Edit `scripts/launch_browser.sh` to adjust the wait time before opening the browser. Modify the `MAX_WAIT` variable to change the maximum wait time (default: 60 seconds).
 
 ## Files Created
 
 - `scripts/launch_browser.sh` - Script to open Chromium browser (waits for server)
+- `scripts/close_browser.sh` - Script to close Chromium browser (all variants)
 - `scripts/thermax-hmi.service` - Systemd service template for the server
 - `scripts/thermax-browser.desktop` - Desktop autostart template for the browser
 - `scripts/setup_autostart.sh` - Setup script
@@ -248,5 +281,15 @@ Edit `scripts/open_browser.sh` to adjust the wait time before opening the browse
 - The server will automatically restart if it crashes (configured with `Restart=always`)
 - The browser script waits up to 60 seconds for the server to be ready
 - Logs are available via `journalctl` for debugging
-- To close the browser in kiosk mode: Press `Alt+F4` or run `pkill chromium-browser` from SSH
+- To close the browser in kiosk mode:
+  - **Keyboard**: Press `Alt+F4` (if keyboard is connected)
+  - **SSH/Terminal**: Run `pkill chromium-browser` (simple)
+  - **Force close**: If simple kill doesn't work, use:
+    ```bash
+    pkill -9 chromium-browser
+    pkill -9 chromium
+    pkill -9 chrome
+    killall -9 chromium-browser 2>/dev/null
+    killall -9 chromium 2>/dev/null
+    ```
 

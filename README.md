@@ -15,10 +15,12 @@ local_server/
 │   └── app.py             # Main FastAPI application
 ├── static/                 # Frontend files (HTML, CSS, JS)
 ├── config/                 # Configuration templates
-├── scripts/                # Utility scripts
+├── scripts/                # Utility scripts (autostart setup, etc.)
 ├── run.py                  # Application entry point
 ├── requirements.txt        # Python dependencies
-└── README.md              # This file
+├── README.md              # This file
+├── ML_INTEGRATION.md      # ML model integration guide
+└── RASPBERRY_PI_SETUP.md  # Raspberry Pi auto-start guide
 ```
 
 ## Features
@@ -143,13 +145,32 @@ When a test starts:
 
 ## Integration with ML Model
 
-The `src/services/data_generator.py` module contains placeholder functions that will be replaced with actual ML model calls:
+The system uses a `DataProvider` interface that allows easy integration of ML models. Currently, `DummyDataProvider` is used for testing, but it can be replaced with an ML model implementation.
 
-- `generate_t0_data()` - Replace with ML model call at test start
-- `generate_t30_data()` - Replace with ML model call at test end
-- `generate_height_history()` - Replace with periodic ML model calls
+### Quick Integration Guide
 
-The data structure matches the `SludgeData` interface from the backend, ensuring seamless integration.
+1. **Create your ML model provider** by implementing the `DataProvider` interface:
+   - See `src/services/data_provider.py` for the interface definition
+   - See `src/services/dummy_data_provider.py` for a reference implementation
+
+2. **Replace the data provider** in `src/app.py`:
+   ```python
+   # Change this line:
+   data_provider = DummyDataProvider()
+   
+   # To:
+   from src.services.ml_data_provider import MLDataProvider
+   data_provider = MLDataProvider()
+   ```
+
+3. **Required Methods**:
+   - `generate_t0_data()` - Generate initial measurements at test start
+   - `generate_t30_data(initial_data, test_duration_minutes)` - Generate final measurements
+   - `generate_height_history(initial_data, duration_minutes, interval_seconds)` - Generate periodic height updates
+
+4. **Data Format**: All methods must return dictionaries matching the `SludgeData` and `SludgeHeightEntry` interfaces (see `src/models/types.py`)
+
+For detailed integration instructions, see [ML_INTEGRATION.md](ML_INTEGRATION.md).
 
 ## Backend Integration
 
@@ -192,16 +213,23 @@ Check that:
 
 ### Replacing Dummy Data with ML Model
 
-1. Edit `src/services/data_generator.py`
-2. Replace functions with ML model calls
-3. Ensure return format matches `SludgeData` interface
-4. Test with actual hardware/ML model
+See [ML_INTEGRATION.md](ML_INTEGRATION.md) for a comprehensive guide on integrating your ML model.
+
+Quick steps:
+1. Create `src/services/ml_data_provider.py` implementing the `DataProvider` interface
+2. Replace `DummyDataProvider()` with `MLDataProvider()` in `src/app.py`
+3. Implement the three required methods: `generate_t0_data()`, `generate_t30_data()`, and `generate_height_history()`
+4. Ensure return format matches `SludgeData` and `SludgeHeightEntry` interfaces
 
 ### Customizing UI
 
 - Edit `static/index.html` for page structure
 - Edit `static/styles.css` for styling
 - Edit `static/app.js` for behavior
+
+### Raspberry Pi Auto-Start
+
+For setting up automatic startup on Raspberry Pi, see [RASPBERRY_PI_SETUP.md](RASPBERRY_PI_SETUP.md).
 
 ## License
 

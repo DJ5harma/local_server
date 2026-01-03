@@ -45,5 +45,9 @@ chromium-browser \
     "$SERVER_URL" &
 
 echo "Browser launched in kiosk mode"
-echo "Press Alt+F4 or run 'pkill chromium-browser' to close"
+echo ""
+echo "To close the browser:"
+echo "  • Keyboard: Press Alt+F4"
+echo "  • Terminal: pkill chromium-browser"
+echo "  • Force:    pkill -9 chromium-browser chromium chrome"
 
