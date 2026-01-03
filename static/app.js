@@ -10,7 +10,8 @@ const AppState = {
     websocket: null,
     testStatus: null,
     testData: null,
-    updateInterval: null
+    updateInterval: null,
+    statusInterval: null  // For home page status polling fallback
 };
 
 // Page IDs
@@ -114,6 +115,8 @@ async function handleLogin() {
             errorDiv.textContent = '';
             passwordInput.value = '';
             showPage(PAGES.HOME);
+            // Connect Socket.IO for real-time updates (will fallback to polling if needed)
+            connectWebSocket();
             startStatusUpdates();
         } else {
             errorDiv.textContent = 'Invalid password';
@@ -173,11 +176,15 @@ async function handleStartTest() {
         if (response.ok && data.success) {
             console.log('✅ Test started successfully, state:', data.state);
             showPage(PAGES.PROGRESS);
-            // Small delay to ensure page is shown
+            // Connect Socket.IO for real-time updates
+            // startProgressUpdates() will only run if Socket.IO fails
+            connectWebSocket();
+            // Small delay to start polling fallback if Socket.IO doesn't connect quickly
             setTimeout(() => {
-                connectWebSocket();
-                startProgressUpdates();
-            }, 100);
+                if (!AppState.websocket || !AppState.websocket.connected) {
+                    startProgressUpdates();
+                }
+            }, 500);
         } else {
             const errorMsg = data.error || data.detail || 'Unknown error';
             console.error('❌ Failed to start test:', errorMsg);
@@ -264,10 +271,22 @@ function connectWebSocket() {
         });
 
         AppState.websocket.on('update', (data) => {
-            console.log('📊 Received update:', data);
+            console.log('📊 Received update via Socket.IO:', data);
             // Data comes directly from server
             if (data && data.status && data.data) {
-                updateProgressDisplay(data.status, data.data);
+                // Stop polling since we have Socket.IO updates
+                stopProgressUpdates();
+                
+                // Update progress display if on progress page
+                if (AppState.currentPage === PAGES.PROGRESS) {
+                    updateProgressDisplay(data.status, data.data);
+                }
+                
+                // Update system state if on home page
+                if (AppState.currentPage === PAGES.HOME) {
+                    const state = data.status.state === 'idle' ? 'Idle' : data.status.state;
+                    updateSystemState(state);
+                }
             } else {
                 console.warn('Invalid update data format:', data);
             }
@@ -285,18 +304,24 @@ function connectWebSocket() {
         });
 
         AppState.websocket.on('disconnect', () => {
-            console.log('Socket.IO disconnected');
-            // Fallback to polling
+            console.log('Socket.IO disconnected - falling back to polling');
+            // Fallback to polling when Socket.IO disconnects
             if (AppState.currentPage === PAGES.PROGRESS && !AppState.updateInterval) {
                 startProgressUpdates();
+            }
+            if (AppState.currentPage === PAGES.HOME && !AppState.statusInterval) {
+                startStatusUpdates();
             }
         });
 
         AppState.websocket.on('connect_error', (error) => {
             console.error('Socket.IO connection error:', error);
             // Fallback to polling if Socket.IO fails
-            if (!AppState.updateInterval) {
+            if (AppState.currentPage === PAGES.PROGRESS && !AppState.updateInterval) {
                 startProgressUpdates();
+            }
+            if (AppState.currentPage === PAGES.HOME && !AppState.statusInterval) {
+                startStatusUpdates();
             }
         });
     } catch (error) {
@@ -318,13 +343,24 @@ function disconnectWebSocket() {
 
 /**
  * Start polling for progress updates (fallback if WebSocket unavailable)
+ * Only used when Socket.IO is not connected
  */
 function startProgressUpdates() {
+    // Don't start polling if Socket.IO is connected
+    if (AppState.websocket && AppState.websocket.connected) {
+        console.log('Socket.IO connected - skipping polling');
+        return;
+    }
+    
     if (AppState.updateInterval) return;
 
+    console.log('Starting polling fallback (Socket.IO not available)');
     AppState.updateInterval = setInterval(async () => {
         if (AppState.currentPage === PAGES.PROGRESS) {
             await fetchProgressData();
+        } else {
+            // Stop polling if we're not on progress page
+            stopProgressUpdates();
         }
     }, 1000); // Update every second
 }
@@ -336,6 +372,10 @@ function stopProgressUpdates() {
     if (AppState.updateInterval) {
         clearInterval(AppState.updateInterval);
         AppState.updateInterval = null;
+    }
+    if (AppState.statusInterval) {
+        clearInterval(AppState.statusInterval);
+        AppState.statusInterval = null;
     }
 }
 
@@ -390,21 +430,34 @@ function updateProgressDisplay(status, data) {
 
 /**
  * Start status updates for home page
+ * Uses Socket.IO if available, otherwise falls back to polling
  */
 function startStatusUpdates() {
-    setInterval(async () => {
-        if (AppState.currentPage === PAGES.HOME) {
-            try {
-                const response = await fetch('/api/test/status');
-                if (response.ok) {
-                    const status = await response.json();
-                    updateSystemState(status.state === 'idle' ? 'Idle' : status.state);
+    // Try Socket.IO first - connect if not already connected
+    if (!AppState.websocket || !AppState.websocket.connected) {
+        connectWebSocket();
+    }
+    
+    // Fallback polling only if Socket.IO is not available
+    if (typeof io === 'undefined' || (!AppState.websocket || !AppState.websocket.connected)) {
+        const statusInterval = setInterval(async () => {
+            if (AppState.currentPage === PAGES.HOME) {
+                try {
+                    const response = await fetch('/api/test/status');
+                    if (response.ok) {
+                        const status = await response.json();
+                        updateSystemState(status.state === 'idle' ? 'Idle' : status.state);
+                    }
+                } catch (error) {
+                    console.error('Error fetching status:', error);
                 }
-            } catch (error) {
-                console.error('Error fetching status:', error);
+            } else {
+                // Stop polling if we're not on home page
+                clearInterval(statusInterval);
             }
-        }
-    }, 2000); // Update every 2 seconds
+        }, 2000); // Update every 2 seconds
+        AppState.statusInterval = statusInterval;
+    }
 }
 
 /**
