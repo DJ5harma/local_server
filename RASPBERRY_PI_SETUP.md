@@ -1,3 +1,4 @@
+HI
 # Raspberry Pi Auto-Start Setup Guide
 
 This guide will help you set up the Thermax HMI server to automatically start when your Raspberry Pi boots up, and automatically open Chromium browser to `http://localhost:5000` in kiosk mode.
