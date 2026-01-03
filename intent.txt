@@ -1,0 +1,68 @@
+PAGE 0 — Login page
+
+Password to go to page 1
+PAGE 1 — HOME / IDLE
+Title:
+ SV30 Test System – Manual Mode
+Status Text:
+ System Power: ON
+ System State: Idle
+Instruction Text:
+ The system is ready for a new SV30 test cycle.
+Buttons:
+New Cycle
+
+
+System Status
+
+
+
+PAGE 2 — START EXPERIMENT
+Title:
+ Start Experiment
+Instruction Text:
+ The system is ready to start recording the SV30 experiment.
+Informational Text:
+Test duration: 30 minutes
+Prompt Text:
+ Start the SV30 test now?
+Buttons:
+YES – Start Test
+Cancel - Home page
+PAGE 3 — EXPERIMENT IN PROGRESS
+Title:
+ SV30 Test Running
+Status Text:
+ Experiment in progress
+
+
+Instruction Text:
+ Please do not disturb the setup.
+Buttons:
+Abort Test
+
+
+PAGE 4 — TEST COMPLETION (Auto display after 30 min test completion)
+Title:
+ SV30 Test Completed
+Message Text:
+ The SV30 test duration has completed.
+Buttons:
+Home page
+Result 
+
+PAGE 5 — FINAL RESULT (ONE-TIME DISPLAY)
+Title:
+ SV30 Test Result 
+Summary Text:
+ Test Status: Completed
+ Test Duration: 30 minutes
+Result Display:
+Sludge height:
+SV30 Value: XX %
+Note Text:
+ This result is displayed once for operator reference.
+Buttons:
+Home page
+
+

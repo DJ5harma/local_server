@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SV30 Test System - Manual Mode</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+<body>
+    <!-- PAGE 0: Login -->
+    <div id="page-login" class="page active">
+        <div class="page-content">
+            <h1 class="page-title">SV30 Test System</h1>
+            <div class="login-form">
+                <label for="password-input">Enter Password:</label>
+                <input type="password" id="password-input" class="input-field" placeholder="Password">
+                <button id="login-btn" class="btn btn-primary btn-large">Login</button>
+                <div id="login-error" class="error-message"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PAGE 1: Home / Idle -->
+    <div id="page-home" class="page">
+        <div class="page-content">
+            <h1 class="page-title">SV30 Test System – Manual Mode</h1>
+            <div class="status-section">
+                <div class="status-item">
+                    <span class="status-label">System Power:</span>
+                    <span class="status-value status-on">ON</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">System State:</span>
+                    <span class="status-value" id="system-state">Idle</span>
+                </div>
+            </div>
+            <p class="instruction-text">The system is ready for a new SV30 test cycle.</p>
+            <div class="button-group">
+                <button id="new-cycle-btn" class="btn btn-primary btn-large">New Cycle</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PAGE 2: Start Experiment -->
+    <div id="page-start" class="page">
+        <div class="page-content">
+            <h1 class="page-title">Start Experiment</h1>
+            <p class="instruction-text">The system is ready to start recording the SV30 experiment.</p>
+            <div class="info-box">
+                <p class="info-text">Test duration: 30 minutes</p>
+            </div>
+            <p class="prompt-text">Start the SV30 test now?</p>
+            <div class="button-group">
+                <button id="start-test-btn" class="btn btn-primary btn-large">YES – Start Test</button>
+                <button id="cancel-start-btn" class="btn btn-secondary btn-large">Cancel - Home page</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PAGE 3: Experiment in Progress -->
+    <div id="page-progress" class="page">
+        <div class="page-content">
+            <h1 class="page-title">SV30 Test Running</h1>
+            <div class="status-section">
+                <div class="status-item">
+                    <span class="status-label">Status:</span>
+                    <span class="status-value status-running">Experiment in progress</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Time Remaining:</span>
+                    <span class="status-value" id="time-remaining" style="font-size: 3.5rem; font-weight: 700; color: #f59e0b; font-family: 'Courier New', monospace;">30:00</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Sludge Height:</span>
+                    <span class="status-value" id="current-height">-- mm</span>
+                </div>
+            </div>
+            <p class="instruction-text">Please do not disturb the setup.</p>
+            <div class="button-group">
+                <button id="abort-test-btn" class="btn btn-danger btn-large">Abort Test</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PAGE 4: Test Completion -->
+    <div id="page-completion" class="page">
+        <div class="page-content">
+            <h1 class="page-title">SV30 Test Completed</h1>
+            <p class="message-text">The SV30 test duration has completed.</p>
+            <div class="button-group">
+                <button id="home-from-completion-btn" class="btn btn-secondary btn-large">Home page</button>
+                <button id="view-result-btn" class="btn btn-primary btn-large">Result</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PAGE 5: Final Result -->
+    <div id="page-result" class="page">
+        <div class="page-content">
+            <h1 class="page-title">SV30 Test Result</h1>
+            <div class="result-section">
+                <div class="result-item">
+                    <span class="result-label">Test Status:</span>
+                    <span class="result-value">Completed</span>
+                </div>
+                <div class="result-item">
+                    <span class="result-label">Test Duration:</span>
+                    <span class="result-value">30 minutes</span>
+                </div>
+                <div class="result-item">
+                    <span class="result-label">Sludge height:</span>
+                    <span class="result-value" id="result-sludge-height">-- mm</span>
+                </div>
+                <div class="result-item">
+                    <span class="result-label">SV30 Value:</span>
+                    <span class="result-value result-highlight" id="result-sv30">-- %</span>
+                </div>
+            </div>
+            <p class="note-text">This result is displayed once for operator reference.</p>
+            <div class="button-group">
+                <button id="home-from-result-btn" class="btn btn-primary btn-large">Home page</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
+
