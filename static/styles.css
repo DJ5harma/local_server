@@ -36,6 +36,10 @@ body {
     align-items: center;
     overflow: hidden;
     position: relative;
+    /* Rotate entire app 180 degrees for upside-down display */
+    transform: rotate(180deg);
+    width: 100vw;
+    height: 100vh;
 }
 
 body::before {
