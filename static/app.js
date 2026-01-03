@@ -12,7 +12,8 @@ const AppState = {
     testData: null,
     updateInterval: null,
     statusInterval: null,  // For home page status polling fallback
-    startingStateTime: null  // Track when we entered STARTING state
+    startingStateTime: null,  // Track when we entered STARTING state
+    lastUpdateTime: null  // Track last successful update for sync verification
 };
 
 // Page IDs
@@ -294,8 +295,12 @@ function connectWebSocket() {
 
         AppState.websocket.on('update', (data) => {
             if (data?.status && data?.data) {
+                // Stop polling when WebSocket is working
                 stopProgressUpdates();
+                // Update UI immediately
                 _handleStateUpdate(data.status, data.data);
+                // Store last update time for sync verification
+                AppState.lastUpdateTime = Date.now();
             }
         });
 
@@ -306,10 +311,12 @@ function connectWebSocket() {
         });
 
         AppState.websocket.on('disconnect', () => {
+            // Immediately start polling to avoid sync gap
             _startPollingFallback();
         });
 
         AppState.websocket.on('connect_error', () => {
+            // Start polling immediately on connection error
             _startPollingFallback();
         });
 
@@ -338,16 +345,35 @@ function _handleStateUpdate(status, data) {
 
 /**
  * Helper to start polling fallback - simplified
+ * Starts immediately to minimize sync gap
  */
 function _startPollingFallback() {
+    // Don't poll if WebSocket is actually connected
     if (AppState.websocket?.connected) {
-        return; // Don't poll if WebSocket is connected
+        return;
     }
     
-    if (AppState.currentPage === PAGES.PROGRESS && !AppState.updateInterval) {
-        startProgressUpdates();
-    } else if (AppState.currentPage === PAGES.HOME && !AppState.statusInterval) {
-        startStatusUpdates();
+    // Start polling immediately based on current page
+    if (AppState.currentPage === PAGES.PROGRESS) {
+        if (!AppState.updateInterval) {
+            startProgressUpdates();
+        }
+        // Also fetch immediately to catch any missed updates
+        fetchProgressData().catch(() => {}); // Ignore errors, polling will retry
+    } else if (AppState.currentPage === PAGES.HOME) {
+        if (!AppState.statusInterval) {
+            startStatusUpdates();
+        }
+        // Also fetch immediately
+        fetch('/api/test/status')
+            .then(r => r.ok ? r.json() : null)
+            .then(status => {
+                if (status) {
+                    const state = status.state === 'idle' ? 'Idle' : status.state;
+                    updateSystemState(state);
+                }
+            })
+            .catch(() => {}); // Ignore errors
     }
 }
 
