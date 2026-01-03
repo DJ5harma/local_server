@@ -1,6 +1,6 @@
 # Raspberry Pi Auto-Start Setup Guide
 
-This guide will help you set up the Thermax HMI server to automatically start when your Raspberry Pi boots up, and automatically open Chromium browser to `http://localhost:5000`.
+This guide will help you set up the Thermax HMI server to automatically start when your Raspberry Pi boots up, and automatically open Chromium browser to `http://localhost:5000` in kiosk mode.
 
 ## Prerequisites
 
@@ -9,27 +9,16 @@ This guide will help you set up the Thermax HMI server to automatically start wh
 3. **Virtual environment** created and dependencies installed
 4. **Chromium browser** installed (usually pre-installed on Raspberry Pi OS)
 
-## Step 1: Install Chromium (if not already installed)
+## Quick Setup
 
-```bash
-sudo apt update
-sudo apt install -y chromium-browser
-```
-
-## Step 2: Install Network Tools (for port checking)
-
-```bash
-sudo apt install -y netcat-openbsd
-```
-
-## Step 3: Navigate to Project Directory
+### Step 1: Navigate to Project Directory
 
 ```bash
 cd ~/ThermaxDashboard/local_server
 # Or wherever your project is located
 ```
 
-## Step 4: Ensure Virtual Environment is Set Up
+### Step 2: Ensure Virtual Environment is Set Up
 
 If you haven't already:
 
@@ -39,12 +28,12 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Step 5: Run the Setup Script
+### Step 3: Run the Setup Script
 
-The setup script will:
-- Make all scripts executable
-- Update service files with correct paths
-- Install systemd services
+The setup script will automatically:
+- Install and configure the server systemd service
+- Install desktop autostart for the browser
+- Check and install missing dependencies
 - Enable auto-start on boot
 
 ```bash
@@ -53,19 +42,21 @@ chmod +x setup_autostart.sh
 ./setup_autostart.sh
 ```
 
-### Alternative: Desktop Autostart (if systemd browser service doesn't work)
+That's it! The setup script handles everything automatically.
 
-If the browser doesn't open automatically with systemd, you can use the desktop autostart method:
+## How It Works
 
-```bash
-# Copy desktop file to autostart directory
-mkdir -p ~/.config/autostart
-cp scripts/thermax-browser.desktop ~/.config/autostart/
-```
+1. **Server Service**: Starts automatically on boot via systemd (`thermax-hmi.service`)
+   - Runs in the background
+   - Automatically restarts if it crashes
+   - Starts before the browser
 
-This will open the browser when the desktop environment starts.
+2. **Browser Autostart**: Opens automatically when you log in to the desktop
+   - Waits for the server to be ready (checks every 2 seconds)
+   - Opens Chromium in kiosk mode (fullscreen)
+   - Uses desktop autostart (more reliable than systemd for GUI apps)
 
-## Step 6: Test the Services
+## Testing
 
 Before rebooting, test that everything works:
 
@@ -76,20 +67,20 @@ sudo systemctl start thermax-hmi.service
 # Check if it's running
 sudo systemctl status thermax-hmi.service
 
-# Start the browser service (if server is running)
-sudo systemctl start thermax-browser.service
-
-# Check browser service status
-sudo systemctl status thermax-browser.service
+# Wait a few seconds, then manually test the browser
+./scripts/launch_browser.sh
 ```
 
-## Step 7: Reboot and Verify
+## Reboot and Verify
 
 ```bash
 sudo reboot
 ```
 
-After reboot, the server should start automatically and Chromium should open to `http://localhost:5000`.
+After reboot:
+1. The server will start automatically in the background
+2. When you log in to the desktop, the browser will automatically open in kiosk mode
+3. The browser will wait for the server to be ready before opening
 
 ## Managing the Services
 
@@ -98,22 +89,16 @@ After reboot, the server should start automatically and Chromium should open to 
 ```bash
 # Check server status
 sudo systemctl status thermax-hmi.service
-
-# Check browser service status
-sudo systemctl status thermax-browser.service
 ```
 
 ### View Logs
 
 ```bash
-# View server logs
+# View server logs (live)
 sudo journalctl -u thermax-hmi.service -f
 
-# View browser service logs
-sudo journalctl -u thermax-browser.service -f
-
-# View all logs together
-sudo journalctl -u thermax-hmi.service -u thermax-browser.service -f
+# View last 50 lines
+sudo journalctl -u thermax-hmi.service -n 50
 ```
 
 ### Start/Stop Services Manually
@@ -128,11 +113,11 @@ sudo systemctl stop thermax-hmi.service
 # Restart server
 sudo systemctl restart thermax-hmi.service
 
-# Start browser
-sudo systemctl start thermax-browser.service
+# Close browser (from SSH/terminal)
+pkill chromium-browser
 
-# Stop browser
-sudo systemctl stop thermax-browser.service
+# Launch browser manually
+./scripts/launch_browser.sh
 ```
 
 ### Disable Auto-Start
@@ -140,15 +125,21 @@ sudo systemctl stop thermax-browser.service
 If you want to disable auto-start:
 
 ```bash
+# Disable server auto-start
 sudo systemctl disable thermax-hmi.service
-sudo systemctl disable thermax-browser.service
+
+# Disable browser auto-start
+rm ~/.config/autostart/thermax-browser.desktop
 ```
 
 To re-enable:
 
 ```bash
+# Re-enable server
 sudo systemctl enable thermax-hmi.service
-sudo systemctl enable thermax-browser.service
+
+# Re-enable browser (re-run setup script)
+./scripts/setup_autostart.sh
 ```
 
 ## Troubleshooting
@@ -176,16 +167,23 @@ sudo systemctl enable thermax-browser.service
 1. **Check if server is running:**
    ```bash
    curl http://localhost:5000
+   sudo systemctl status thermax-hmi.service
    ```
 
-2. **Check browser service logs:**
+2. **Check if autostart file exists:**
    ```bash
-   sudo journalctl -u thermax-browser.service -n 50
+   ls -la ~/.config/autostart/thermax-browser.desktop
    ```
 
 3. **Manually test browser script:**
    ```bash
-   ./scripts/open_browser.sh
+   ./scripts/launch_browser.sh
+   ```
+
+4. **Check browser script logs:**
+   ```bash
+   # Run with output visible
+   DISPLAY=:0 ./scripts/launch_browser.sh
    ```
 
 ### Service Fails to Start
@@ -211,11 +209,11 @@ sudo systemctl enable thermax-browser.service
 
 ### Change Browser Mode
 
-Edit `scripts/open_browser.sh`:
+Edit `scripts/launch_browser.sh`:
 
-- **Kiosk mode (fullscreen):** `chromium-browser --kiosk http://localhost:5000 &`
-- **Normal window:** `chromium-browser http://localhost:5000 &`
-- **With specific window size:** `chromium-browser --window-size=1920,1080 http://localhost:5000 &`
+- **Kiosk mode (fullscreen):** Already configured (default)
+- **Normal window:** Remove `--kiosk` flag from the chromium-browser command
+- **With specific window size:** Add `--window-size=1920,1080` flag
 
 ### Change Server Port
 
@@ -235,18 +233,19 @@ Edit `scripts/open_browser.sh` to adjust the wait time before opening the browse
 
 ## Files Created
 
-- `scripts/start_server.sh` - Script to start the server
-- `scripts/open_browser.sh` - Script to open Chromium browser
-- `scripts/thermax-hmi.service` - Systemd service for the server
-- `scripts/thermax-browser.service` - Systemd service for the browser
+- `scripts/launch_browser.sh` - Script to open Chromium browser (waits for server)
+- `scripts/thermax-hmi.service` - Systemd service template for the server
+- `scripts/thermax-browser.desktop` - Desktop autostart template for the browser
 - `scripts/setup_autostart.sh` - Setup script
-- `/etc/systemd/system/thermax-hmi.service` - Installed service file
-- `/etc/systemd/system/thermax-browser.service` - Installed service file
+- `/etc/systemd/system/thermax-hmi.service` - Installed server service
+- `~/.config/autostart/thermax-browser.desktop` - Installed browser autostart
 
 ## Notes
 
 - The server service runs as the user who ran the setup script (usually `pi`)
-- The browser service requires a graphical session (runs after `graphical.target`)
+- The browser uses desktop autostart, so it only opens when you log in to the desktop
 - The server will automatically restart if it crashes (configured with `Restart=always`)
+- The browser script waits up to 60 seconds for the server to be ready
 - Logs are available via `journalctl` for debugging
+- To close the browser in kiosk mode: Press `Alt+F4` or run `pkill chromium-browser` from SSH
 
