@@ -384,14 +384,16 @@ def send_periodic_updates(initial_data: Dict[str, Any]):
             test_manager.add_height_entry(entry)
             print(f"📏 Height update {i+1}/{len(height_history)}: {entry['height']:.2f}mm")
             
-            # Send to backend
-            backend_sender.send_height_update(
-                entry["height"],
-                entry["dateTime"],
-                entry.get("testType")
-            )
+            # NOTE: Periodic updates to production backend are disabled
+            # Only t=0 and t=30 data are sent to backend
+            # Uncomment below to re-enable periodic backend updates:
+            # backend_sender.send_height_update(
+            #     entry["height"],
+            #     entry["dateTime"],
+            #     entry.get("testType")
+            # )
             
-            # Emit via SocketIO if available
+            # Emit via SocketIO to local HMI (still works for local display)
             if socketio:
                 try:
                     socketio.emit("height_update", {

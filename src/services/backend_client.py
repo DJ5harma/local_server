@@ -198,7 +198,12 @@ class BackendSender:
             # Save to local results folder
             save_height_update(height_mm, timestamp, test_type, self.factory_code)
             
-            self.sio.emit("sludge-height-update", update_data)
+            # NOTE: Periodic updates to production backend are disabled
+            # Only t=0 and t=30 data are sent to backend
+            # Uncomment below to re-enable periodic backend updates:
+            # self.sio.emit("sludge-height-update", update_data)
+            
+            # Still return True since local save succeeded
             return True
         except Exception as e:
             print(f"❌ Failed to send height update: {e}")
