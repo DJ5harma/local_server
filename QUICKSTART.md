@@ -1,10 +1,40 @@
 # Quick Start Guide
 
+## Creating Virtual Environment
+
+### Windows (PowerShell)
+```powershell
+cd local_server
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+```
+
+### Windows (CMD)
+```cmd
+cd local_server
+python -m venv venv
+venv\Scripts\activate.bat
+```
+
+### Linux/Mac
+```bash
+cd local_server
+python3 -m venv venv
+source venv/bin/activate
+```
+
+**Note:** If you get an execution policy error on Windows PowerShell, run:
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
 ## Windows (PowerShell)
 
 1. **Activate virtual environment:**
    ```powershell
-   .\activate.ps1
+   .\venv\Scripts\Activate.ps1
+   # Or use the helper script if it exists:
+   # .\activate.ps1
    ```
 
 2. **Install dependencies:**

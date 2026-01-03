@@ -49,9 +49,9 @@ Thumbs.db
 results/
 !results/.gitkeep
 
-# Old files (to be removed)
-app.py
-test_state.py
-dummy_data.py
-backend_sender.py
-create_env_example.py
+# Old files (already removed - kept for reference)
+# These files were moved to src/ directory during code reorganization
+# app.py -> src/app.py
+# test_state.py -> src/models/test_state.py
+# dummy_data.py -> src/services/data_generator.py
+# backend_sender.py -> src/services/backend_client.py
