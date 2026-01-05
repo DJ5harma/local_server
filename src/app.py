@@ -64,12 +64,7 @@ test_manager = TestStateManager(test_duration_minutes=Config.TEST_DURATION_MINUT
 backend_sender = get_backend_sender()
 
 # Initialize data provider (can be easily swapped with ML model implementation)
-# Auto-detect sv30_pipeline path
-import os
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sv30_path = os.path.join(BASE_DIR, "sv30_pipeline")
-data_provider = SV30SubprocessProvider(sv30_path=sv30_path)
-
+data_provider = DummyDataProvider()
 
 # Initialize test service
 test_service = TestService(
