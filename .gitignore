@@ -55,3 +55,16 @@ results/
 # test_state.py -> src/models/test_state.py
 # dummy_data.py -> src/services/data_generator.py
 # backend_sender.py -> src/services/backend_client.py
+```
+# SV30 Pipeline
+sv30_pipeline/logs/
+sv30_pipeline/results/
+sv30_pipeline/stage_inputs/
+sv30_pipeline/archive/
+sv30_pipeline/graphs/
+*.mp4
+*.avi
+*.jpg
+*.jpeg
+*.png
+!static/*.png
