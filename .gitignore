@@ -51,6 +51,11 @@ sv30_pipeline/archive/
 .env
 *.key
 *.pem
+*.json
+dashboard_payload.json
+height_history.json
+t0_*.json
+t30_*.json
 
 # IDE
 .vscode/
