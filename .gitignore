@@ -30,6 +30,36 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+
+# SV30 runtime files
+sv30_pipeline/stage_inputs/
+sv30_pipeline/results/
+sv30_pipeline/logs/
+sv30_pipeline/archive/
+*.mp4
+*.avi
+
+# Sensitive
+.env
+*.key
+*.pem
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
 
 # IDE
 .vscode/

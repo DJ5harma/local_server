@@ -1,0 +1,21 @@
+{
+  "testId": "SV30-20260105-203011-E",
+  "timestamp": "2026-01-05T20:30:11.530372",
+  "testType": "evening",
+  "factoryCode": "factory-a",
+  "sludge_height_mm": 48.58,
+  "mixture_height_mm": 101.96,
+  "t_min": 0,
+  "floc_count": 0,
+  "floc_avg_size_mm": 0.0,
+  "rgb_clear_zone": {
+    "r": 245,
+    "g": 240,
+    "b": 235
+  },
+  "rgb_sludge_zone": {
+    "r": 120,
+    "g": 100,
+    "b": 80
+  }
+}

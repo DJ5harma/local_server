@@ -13,7 +13,8 @@ from flask_socketio import SocketIO, emit
 from .config import Config
 from .models import TestStateManager
 from .services import get_backend_sender
-from .services.dummy_data_provider import DummyDataProvider
+from .services.sv30_data_provider import SV30DataProvider
+import os
 from .services.test_service import TestService
 from .services.test_monitor import TestMonitor
 from .api.routes import init_routes, register_routes
@@ -64,7 +65,9 @@ test_manager = TestStateManager(test_duration_minutes=Config.TEST_DURATION_MINUT
 backend_sender = get_backend_sender()
 
 # Initialize data provider (can be easily swapped with ML model implementation)
-data_provider = DummyDataProvider()
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sv30_path = os.path.join(BASE_DIR, "sv30_pipeline")
+data_provider = SV30DataProvider(sv30_path=sv30_path)
 
 # Initialize test service
 test_service = TestService(
