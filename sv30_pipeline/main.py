@@ -55,6 +55,7 @@ try:
     from modules.calculate_metrics import calculate_metrics
     from modules.send_to_dashboard import send_results
     from modules.aws_uploader import upload_to_s3
+    from modules.rgb_extract import extract_rgb_values
 except ImportError as e:
     logger.error(f"❌ Failed to import modules: {e}")
     sys.exit(1)
@@ -92,7 +93,7 @@ def main():
     try:
         print_banner()
         
-        TOTAL_STAGES = 9
+        TOTAL_STAGES = 10
         
         # ==========================================
         # STAGE 1: VIDEO CAPTURE
@@ -168,6 +169,25 @@ def main():
             return False
         
         print_stage_complete("Sludge Detection", time.time() - stage_start)
+        
+        # ==========================================
+        # STAGE 7: RGB EXTRACTION
+        # ==========================================
+        
+        print_stage_header(7, TOTAL_STAGES, "RGB EXTRACTION")
+        stage_start = time.time()
+        rgb_data = extract_rgb_values()
+        if not rgb_data:
+                logger.warning("??  RGB extraction failed (non-critical)")
+        print_stage_complete("RGB Extraction", time.time() - stage_start)        
+        
+        
+
+        
+        
+        
+            
+
         
         # ==========================================
         # STAGE 7: CALCULATE METRICS

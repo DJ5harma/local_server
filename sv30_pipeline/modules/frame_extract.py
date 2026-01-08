@@ -100,6 +100,13 @@ def extract_frames(video_path):
     logger.info(f"Output: {config.RAW_FOLDER}")
     logger.info("="*70 + "\n")
     
+    if not config.DEV_MODE:
+        try:
+            logger.info(f"[PROD MODE] Deleting video: {video_path}")
+            os.remove(video_path)
+        except Exception as e:
+            logger.warning(f"  [WARN] Could not delete video: {e}")
+            
     return extracted
 
 

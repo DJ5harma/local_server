@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 # Detection parameters
 NUM_SCAN_LINES = 10
 SCAN_LINE_SPACING = 7  # pixels between lines
-BLACK_PIXELS_REQUIRED = 5  # Consecutive black pixels below white pixel
+BLACK_PIXELS_REQUIRED = 15  # Consecutive black pixels below white pixel
 SCAN_DEPTH_PCT = 50  # Scan in top 50% of mixture
 OUTLIER_THRESHOLD_EXTREME = 100  # pixels
 OUTLIER_THRESHOLD_MODERATE = 30  # pixels

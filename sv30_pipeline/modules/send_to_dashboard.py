@@ -3,6 +3,7 @@ Send to Dashboard Module
 
 Sends final results to Thermax dashboard via SocketIO.
 Uses exact format from backend documentation.
+Includes real RGB values from extraction.
 
 Author: Jan 2026
 """
@@ -37,6 +38,43 @@ def determine_test_type():
         return ("evening", "E")
 
 
+def load_rgb_values():
+    """
+    Load RGB values from rgb_values.json.
+    
+    Returns:
+        tuple: (clear_rgb, sludge_rgb) dictionaries
+    """
+    rgb_file = os.path.join(config.RESULTS_FOLDER, "rgb_values.json")
+    
+    if os.path.exists(rgb_file):
+        try:
+            with open(rgb_file, 'r') as f:
+                rgb_data = json.load(f)
+            
+            clear_rgb = rgb_data['clear_zone']['rgb']
+            sludge_rgb = rgb_data['sludge_zone']['rgb']
+            
+            logger.info(f"? Loaded RGB values from: {rgb_file}")
+            logger.info(f"   Clear zone: RGB({clear_rgb['r']}, {clear_rgb['g']}, {clear_rgb['b']})")
+            logger.info(f"   Sludge zone: RGB({sludge_rgb['r']}, {sludge_rgb['g']}, {sludge_rgb['b']})\n")
+            
+            return clear_rgb, sludge_rgb
+            
+        except Exception as e:
+            logger.warning(f"??  Failed to load RGB data: {e}")
+            logger.warning("   Using fallback RGB values\n")
+    else:
+        logger.warning(f"??  RGB file not found: {rgb_file}")
+        logger.warning("   Using fallback RGB values\n")
+    
+    # Fallback RGB values
+    clear_rgb = {"r": 245, "g": 250, "b": 255}
+    sludge_rgb = {"r": 180, "g": 160, "b": 140}
+    
+    return clear_rgb, sludge_rgb
+
+
 def send_results():
     """
     Send final metrics to dashboard via SocketIO.
@@ -51,13 +89,13 @@ def send_results():
     
     # Check if SocketIO is enabled
     if not config.SOCKETIO_ENABLED:
-        logger.info("⚠️  SocketIO disabled in config")
+        logger.info("??  SocketIO disabled in config")
         logger.info("   Set SOCKETIO_ENABLED = True in sv30config.py")
         return False
     
     # Check factory code
     if not hasattr(config, 'FACTORY_CODE') or not config.FACTORY_CODE:
-        logger.error("❌ FACTORY_CODE not set in sv30config.py!")
+        logger.error("? FACTORY_CODE not set in sv30config.py!")
         logger.error("   Add: FACTORY_CODE = 'factory-a'")
         return False
     
@@ -65,7 +103,7 @@ def send_results():
     metrics_path = os.path.join(config.RESULTS_FOLDER, "final_metrics.json")
     
     if not os.path.exists(metrics_path):
-        logger.error(f"❌ Metrics not found: {metrics_path}")
+        logger.error(f"? Metrics not found: {metrics_path}")
         logger.error("   Run: python modules/calculate_metrics.py first")
         return False
     
@@ -75,6 +113,9 @@ def send_results():
     logger.info(f"Loaded metrics from: {metrics_path}")
     logger.info(f"Factory Code: {config.FACTORY_CODE}")
     logger.info(f"URL: {config.SOCKETIO_URL}\n")
+    
+    # Load RGB values
+    clear_rgb, sludge_rgb = load_rgb_values()
     
     try:
         import socketio
@@ -87,16 +128,16 @@ def send_results():
         
         @sio.event
         def connect():
-            logger.info("✅ Connected to dashboard!")
+            logger.info("? Connected to dashboard!")
             connected[0] = True
         
         @sio.event
         def connect_error(data):
-            logger.error(f"❌ Connection error: {data}")
+            logger.error(f"? Connection error: {data}")
         
         @sio.event
         def disconnect():
-            logger.info("🔌 Disconnected from dashboard")
+            logger.info("? Disconnected from dashboard")
         
         # Determine test type
         test_type, test_code = determine_test_type()
@@ -117,8 +158,8 @@ def send_results():
             "mixture_height_mm": metrics['mixture_height_mm'],
             "floc_count": 0,  # Not calculated in our system
             "floc_avg_size_mm": 0.0,  # Not calculated in our system
-            "rgb_clear_zone": {"r": 245, "g": 250, "b": 255},
-            "rgb_sludge_zone": {"r": 180, "g": 160, "b": 140}
+            "rgb_clear_zone": clear_rgb,  # Real RGB values
+            "rgb_sludge_zone": sludge_rgb  # Real RGB values
         }
         
         # Prepare t=30 payload (EXACT format from documentation)
@@ -133,10 +174,10 @@ def send_results():
             "mixture_height_mm": metrics['mixture_height_mm'],
             "floc_count": 0,  # Not calculated
             "floc_avg_size_mm": 0.0,  # Not calculated
-            "sv30_mL_per_L": metrics['sv30_pct'] * 10,  # Convert % to mL/L
+            "sv30_mL_per_L": metrics['sv30_mL_per_L'],  # Already calculated
             "velocity_mm_per_min": metrics['settling_rate_mm_per_min'],
-            "rgb_clear_zone": {"r": 245, "g": 250, "b": 255},
-            "rgb_sludge_zone": {"r": 180, "g": 160, "b": 140}
+            "rgb_clear_zone": clear_rgb,  # Real RGB values
+            "rgb_sludge_zone": sludge_rgb  # Real RGB values
         }
         
         logger.info("t=0 Payload:")
@@ -153,7 +194,7 @@ def send_results():
         time.sleep(2)
         
         if not connected[0]:
-            logger.error("❌ Failed to connect!")
+            logger.error("? Failed to connect!")
             return False
         
         # Send t=0 data
@@ -169,14 +210,14 @@ def send_results():
         # Disconnect
         sio.disconnect()
         
-        logger.info("\n✅ Results sent successfully!")
+        logger.info("\n? Results sent successfully!")
         logger.info("   Check dashboard for updates!")
         logger.info("="*70 + "\n")
         
         return True
         
     except Exception as e:
-        logger.error(f"\n❌ Failed to send: {e}")
+        logger.error(f"\n? Failed to send: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -187,7 +228,7 @@ if __name__ == "__main__":
     success = send_results()
     
     if success:
-        print("\n✅ Dashboard send successful!")
+        print("\n? Dashboard send successful!")
     else:
-        print("\n❌ Dashboard send failed!")
+        print("\n? Dashboard send failed!")
         sys.exit(1)

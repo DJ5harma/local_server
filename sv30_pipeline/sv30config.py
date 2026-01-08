@@ -43,16 +43,16 @@ CAM1_USB_INDEX = 0  # /dev/video0 (change to 1, 2, etc. if needed)
 # ==========================================
 # VIDEO CAPTURE
 # ==========================================
-VIDEO_DURATION_SEC = 35 * 60  # 35 minutes (change to 2*60 for testing)
+VIDEO_DURATION_SEC = 35* 60  # 35 minutes (change to 2*60 for testing)
 FRAME_INTERVAL_SEC = 10  # Extract frame every 10 seconds
 
 # ==========================================
 # IMAGE PREPROCESSING - CROP COORDINATES
 # ==========================================
-CROP_X1 = 440
-CROP_Y1 = 350
-CROP_X2 = 1360
-CROP_Y2 = 1200
+CROP_X1 = 180
+CROP_Y1 = 0
+CROP_X2 = 500
+CROP_Y2 = 480
 
 # ==========================================
 # IMAGE EXTENSIONS
@@ -80,11 +80,11 @@ FACTORY_CODE = "factory-a"
 # ==========================================
 # AWS S3 UPLOAD
 # ==========================================
-AWS_ENABLED = False  # Set to True to enable
-AWS_REGION = "us-east-1"
-AWS_BUCKET_NAME = "your-bucket-name"
-AWS_ACCESS_KEY_ID = ""  # Add your key
-AWS_SECRET_ACCESS_KEY = ""  # Add your secret
+AWS_ENABLED = True  # Set to True to enable
+AWS_REGION = "ap-southeast-2"
+AWS_BUCKET_NAME = "sv30-testdata-thermax"
+AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 
 # ==========================================
 # MODBUS SERVER
