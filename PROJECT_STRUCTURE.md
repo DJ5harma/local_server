@@ -8,7 +8,7 @@ The project is organized with clear separation of concerns following best practi
 local_server/
 ├── src/                          # Source code
 │   ├── __init__.py              # Package initialization
-│   ├── app.py                   # Main FastAPI application
+│   ├── app.py                   # Main Flask application
 │   ├── config.py                 # Configuration management
 │   │
 │   ├── api/                     # API layer
@@ -23,12 +23,17 @@ local_server/
 │   │
 │   ├── services/                # Business logic
 │   │   ├── __init__.py
-│   │   ├── data_generator.py    # Data generation (ML placeholder)
+│   │   ├── data_provider.py     # DataProvider interface (abstract base class)
+│   │   ├── dummy_data_provider.py  # Dummy data generator (for testing)
+│   │   ├── sv30_data_provider.py   # Real SV30 pipeline integration
+│   │   ├── test_service.py      # Test lifecycle management
+│   │   ├── test_monitor.py      # Background test monitoring
 │   │   └── backend_client.py    # Backend Socket.IO client
 │   │
 │   └── utils/                   # Utilities
 │       ├── __init__.py
-│       └── auth.py              # Authentication utilities
+│       ├── dateUtils.py         # IST timezone utilities
+│       └── results_storage.py   # Local results file storage
 │
 ├── static/                       # Frontend files
 │   ├── index.html               # HMI interface
@@ -51,8 +56,9 @@ local_server/
 ## Module Responsibilities
 
 ### `src/app.py`
-- Main FastAPI application setup
+- Main Flask application setup
 - Dependency injection
+- Data provider selection (SV30DataProvider or DummyDataProvider)
 - Background task management
 - Application lifecycle (startup/shutdown)
 
@@ -82,20 +88,45 @@ local_server/
 - Data structure interfaces
 - Request/response models
 
-### `src/services/data_generator.py`
-- Test data generation (dummy)
-- ML model integration point
-- Data formatting
+### `src/services/data_provider.py`
+- Abstract `DataProvider` interface
+- Defines contract for all data providers
+
+### `src/services/dummy_data_provider.py`
+- Dummy data generation for testing
+- Generates realistic test data with random values
+- Uses IST timezone for all timestamps
+
+### `src/services/sv30_data_provider.py`
+- Real SV30 pipeline integration
+- Runs `sv30_pipeline/main.py` as subprocess
+- Reads results from pipeline output files
+- Uses IST timezone for all timestamps
+
+### `src/services/test_service.py`
+- Test lifecycle management
+- Coordinates between data provider, state manager, and backend client
+- Handles test start, completion, and data generation
+
+### `src/services/test_monitor.py`
+- Background monitoring of test state
+- Auto-completes tests when duration elapses
+- WebSocket broadcasting
 
 ### `src/services/backend_client.py`
 - Backend server communication
 - Socket.IO client management
 - Data transmission
 
-### `src/utils/auth.py`
-- Authentication logic
-- Password verification
-- Session management (future)
+### `src/utils/dateUtils.py`
+- Indian Standard Time (IST) timezone utilities
+- Functions for IST-aware datetime operations
+- UTC conversion for backend compatibility
+
+### `src/utils/results_storage.py`
+- Local file storage for test results
+- Organizes results by date (IST dates)
+- Saves sludge data and height updates
 
 ## Benefits of This Structure
 
@@ -122,11 +153,20 @@ local_server/
 2. Update `.env.example`
 3. Document in README
 
-## Migration Notes
+## Key Features
 
-Old files (can be removed):
-- `app.py` (root) → `src/app.py`
-- `test_state.py` (root) → `src/models/test_state.py`
-- `dummy_data.py` (root) → `src/services/data_generator.py`
-- `backend_sender.py` (root) → `src/services/backend_client.py`
+### Timezone Support
+- All datetime operations use Indian Standard Time (IST - UTC+5:30)
+- Timestamps sent to backend are converted to UTC ISO format
+- Local file organization uses IST dates
+
+### Data Flow
+- t=0 data: Generated and stored locally (for frontend display, NOT sent to backend)
+- t=30 data: Generated and sent to backend (final results)
+- Height history: Generated locally for frontend display
+
+### Data Providers
+- `SV30DataProvider`: Real pipeline integration (default)
+- `DummyDataProvider`: Testing/development
+- Easy to add custom ML model providers
 
