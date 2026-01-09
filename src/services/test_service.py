@@ -69,8 +69,9 @@ class TestService:
             raise TestStateError("Failed to start test")
         
         try:
-            # Generate and store t=0 data
-            logger.info("Generating t=0 data...")
+            # Generate and store t=0 data (for local use only - frontend display, height history)
+            # NOTE: t=0 data is NOT sent to backend - backend only needs final t=30 data
+            logger.info("Generating t=0 data (local use only)...")
             t0_data = self.data_provider.generate_t0_data()
             self.test_manager.set_test_data("t0_data", t0_data)
             
@@ -80,15 +81,11 @@ class TestService:
             
             # Start background tasks (non-blocking, errors are non-critical)
             def background_tasks():
-                try:
-                    # Send t=0 data to backend
-                    logger.info("Sending t=0 data to backend...")
-                    self.backend_sender.send_sludge_data(t0_data)
-                except Exception as e:
-                    logger.warning(f"Backend send failed (non-critical): {e}")
+                # NOTE: t=0 data is NOT sent to backend - backend only needs final t=30 data
+                # t=0 data is kept locally for frontend display and height history generation
                 
                 try:
-                    # Start periodic height updates
+                    # Start periodic height updates (uses t=0 data for initial state)
                     self._start_periodic_updates(t0_data)
                 except Exception as e:
                     logger.warning(f"Periodic updates failed (non-critical): {e}")
@@ -150,7 +147,9 @@ class TestService:
         Get current test data for real-time updates.
         
         Returns:
-            Dictionary with t0_data, t30_data, latest_height, and height_history
+            Dictionary with t0_data (local use only), t30_data, latest_height, and height_history
+            NOTE: t0_data is kept locally for frontend display and height history generation.
+            Only t30_data is sent to backend.
         """
         t0_data = self.test_manager.get_test_data("t0_data")
         t30_data = self.test_manager.get_test_data("t30_data")
@@ -174,6 +173,7 @@ class TestService:
         
         This method is called when the test duration has elapsed.
         It generates t=30 data and sends it to the backend.
+        NOTE: Only t=30 data is sent to backend (t=0 is kept locally only).
         """
         if self.test_manager.state != TestState.RUNNING:
             logger.warning(f"Cannot complete test in state: {self.test_manager.state.value}")
@@ -239,7 +239,8 @@ class TestService:
                 )
                 self.test_manager.set_test_data("t30_data", t30_data)
                 
-                # Send t30 data to backend (non-blocking)
+                # Send t=30 data to backend (non-blocking)
+                # NOTE: Only t=30 final data is sent to backend, not t=0
                 def send_t30_data_async():
                     try:
                         logger.info("Sending t=30 data to backend...")

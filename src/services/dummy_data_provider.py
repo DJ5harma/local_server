@@ -101,19 +101,24 @@ class DummyDataProvider(DataProvider):
             
             logger.info(f"Generated t=0 data: hour={current_hour}, test_type={test_type} ({test_type_code})")
             
+            # Ensure timestamp has Z suffix for ISO 8601 UTC format
+            timestamp = now.isoformat()
+            if not timestamp.endswith('Z'):
+                timestamp = timestamp + "Z"
+            
             return {
                 "testId": test_id,
-                "timestamp": now.isoformat() + "Z",
+                "timestamp": timestamp,
                 "testType": test_type,
                 "operator": "Operator",
                 "t_min": 0,
-                "sludge_height_mm": initial_sludge_height,
-                "mixture_height_mm": mixture_height,
+                "sludge_height_mm": round(initial_sludge_height, 2),
+                "mixture_height_mm": round(mixture_height, 2),
                 "floc_count": floc_count,
-                "floc_avg_size_mm": floc_avg_size,
+                "floc_avg_size_mm": round(floc_avg_size, 2),
                 "rgb_clear_zone": rgb_clear_zone,
                 "rgb_sludge_zone": rgb_sludge_zone,
-                "velocity_mm_per_min": 0,  # No velocity at t=0
+                "velocity_mm_per_min": 0.0,  # No velocity at t=0
             }
         except Exception as e:
             logger.error(f"Failed to generate t=0 data: {e}")
@@ -158,10 +163,14 @@ class DummyDataProvider(DataProvider):
             )
             
             # Create timestamp at end of test duration
-            initial_timestamp = datetime.fromisoformat(
-                initial_data["timestamp"].replace("Z", "+00:00")
-            )
+            initial_timestamp_str = initial_data["timestamp"].replace("Z", "+00:00")
+            initial_timestamp = datetime.fromisoformat(initial_timestamp_str)
             final_timestamp = initial_timestamp + timedelta(minutes=test_duration_minutes)
+            
+            # Ensure timestamp has Z suffix for ISO 8601 UTC format
+            timestamp = final_timestamp.isoformat().replace("+00:00", "Z")
+            if not timestamp.endswith('Z'):
+                timestamp = timestamp + "Z"
             
             # Update RGB values slightly (clear zone might become clearer)
             rgb_clear_zone = {
@@ -174,17 +183,17 @@ class DummyDataProvider(DataProvider):
             
             return {
                 "testId": initial_data["testId"],
-                "timestamp": final_timestamp.isoformat().replace("+00:00", "Z"),
+                "timestamp": timestamp,
                 "testType": initial_data.get("testType", "morning"),
                 "operator": initial_data.get("operator", "Operator"),
                 "t_min": int(test_duration_minutes),
-                "sludge_height_mm": final_sludge_height,
-                "mixture_height_mm": mixture_height,
-                "sv30_height_mm": final_sludge_height,
+                "sludge_height_mm": round(final_sludge_height, 2),
+                "mixture_height_mm": round(mixture_height, 2),
+                "sv30_height_mm": round(final_sludge_height, 2),
                 "sv30_mL_per_L": round(sv30_mL_per_L, 1),
                 "velocity_mm_per_min": round(velocity_mm_per_min, 2),
                 "floc_count": initial_data["floc_count"],
-                "floc_avg_size_mm": initial_data["floc_avg_size_mm"],
+                "floc_avg_size_mm": round(initial_data["floc_avg_size_mm"], 2),
                 "rgb_clear_zone": rgb_clear_zone,
                 "rgb_sludge_zone": initial_data["rgb_sludge_zone"],
             }

@@ -46,7 +46,10 @@ class SV30DataProvider(DataProvider):
         """Generate t=0 data AND start video capture subprocess"""
         now = datetime.now()
         test_type = self._determine_test_type(now.hour)
-        self.current_test_id = f"SV30-{now.strftime('%Y%m%d-%H%M%S')}-{test_type[1]}"
+        # Use same test ID format as dummy provider for consistency
+        date_str = now.strftime("%Y-%m-%d")
+        test_type_code = test_type[1]
+        self.current_test_id = f"SV30-{date_str}-001-{test_type_code}"
         
         logger.info(f"[SV30] 🚀 Starting test: {self.current_test_id}")
         
@@ -56,17 +59,27 @@ class SV30DataProvider(DataProvider):
         if not started:
             raise Exception("Failed to start SV30 capture subprocess")
         
+        # Ensure timestamp has Z suffix for ISO 8601 UTC format
+        timestamp = now.isoformat()
+        if not timestamp.endswith('Z'):
+            timestamp = timestamp + "Z"
+        
+        # Use default RGB values (will be updated from pipeline results at t=30)
+        rgb_clear_zone = {"r": 255, "g": 255, "b": 255}
+        rgb_sludge_zone = {"r": 200, "g": 180, "b": 150}
+        
         return {
             "testId": self.current_test_id,
-            "timestamp": now.isoformat(),
+            "timestamp": timestamp,
             "testType": test_type[0],
+            "operator": "Thermax",
+            "t_min": 0,
             "sludge_height_mm": 0.0,
             "mixture_height_mm": 214.0,
             "floc_count": 0,
             "floc_avg_size_mm": 0.0,
-            "t_min": 0,
-            "rgb_clear_zone": {"r": 255, "g": 255, "b": 255},
-            "rgb_sludge_zone": {"r": 200, "g": 180, "b": 150}
+            "rgb_clear_zone": rgb_clear_zone,
+            "rgb_sludge_zone": rgb_sludge_zone
         }
     
     def generate_t30_data(self, initial_data: Dict[str, Any], test_duration_minutes: float) -> Dict[str, Any]:
@@ -74,6 +87,7 @@ class SV30DataProvider(DataProvider):
         logger.info(f"[SV30] ⏳ Waiting for results...")
         
         results_file = os.path.join(self.sv30_path, "results", "final_metrics.json")
+        rgb_file = os.path.join(self.sv30_path, "results", "rgb_values.json")
         
         # Wait max 90 minutes
         max_wait = 5400
@@ -91,23 +105,49 @@ class SV30DataProvider(DataProvider):
         if not os.path.exists(results_file):
             raise Exception("Timeout waiting for SV30 results")
         
-        # Load results
+        # Load metrics
         with open(results_file, 'r') as f:
             metrics = json.load(f)
+        
+        # Load RGB values from pipeline results
+        rgb_clear_zone = {"r": 245, "g": 250, "b": 255}  # Fallback
+        rgb_sludge_zone = {"r": 180, "g": 160, "b": 140}  # Fallback
+        
+        if os.path.exists(rgb_file):
+            try:
+                with open(rgb_file, 'r') as f:
+                    rgb_data = json.load(f)
+                rgb_clear_zone = rgb_data.get('clear_zone', {}).get('rgb', rgb_clear_zone)
+                rgb_sludge_zone = rgb_data.get('sludge_zone', {}).get('rgb', rgb_sludge_zone)
+                logger.info(f"[SV30] Loaded RGB values from pipeline results")
+            except Exception as e:
+                logger.warning(f"[SV30] Failed to load RGB values: {e}, using fallback")
+        else:
+            logger.warning(f"[SV30] RGB file not found: {rgb_file}, using fallback values")
+        
+        # Create timestamp at end of test duration
+        now = datetime.now()
+        timestamp = now.isoformat()
+        if not timestamp.endswith('Z'):
+            timestamp = timestamp + "Z"
         
         logger.info(f"[SV30] SV30: {metrics['sv30_pct']}%")
         
         return {
             "testId": initial_data.get("testId"),
-            "timestamp": datetime.now().isoformat(),
-            "testType": initial_data.get("testType"),
-            "sludge_height_mm": metrics['sludge_height_t30_mm'],
-            "mixture_height_mm": metrics['mixture_height_mm'],
-            "sv30_mL_per_L": metrics['sv30_mL_per_L'],
-            "velocity_mm_per_min": metrics['settling_rate_mm_per_min'],
+            "timestamp": timestamp,
+            "testType": initial_data.get("testType", "morning"),
+            "operator": initial_data.get("operator", "Thermax"),
             "t_min": int(test_duration_minutes),
-            "rgb_clear_zone": {"r": 245, "g": 250, "b": 255},
-            "rgb_sludge_zone": {"r": 180, "g": 160, "b": 140}
+            "sludge_height_mm": round(metrics['sludge_height_t30_mm'], 2),
+            "mixture_height_mm": round(metrics['mixture_height_mm'], 2),
+            "sv30_height_mm": round(metrics['sludge_height_t30_mm'], 2),
+            "sv30_mL_per_L": round(metrics['sv30_mL_per_L'], 1),
+            "velocity_mm_per_min": round(metrics['settling_rate_mm_per_min'], 2),
+            "floc_count": initial_data.get("floc_count", 0),
+            "floc_avg_size_mm": round(initial_data.get("floc_avg_size_mm", 0.0), 2),
+            "rgb_clear_zone": rgb_clear_zone,
+            "rgb_sludge_zone": rgb_sludge_zone
         }
     
     def generate_height_history(self, initial_data: Dict[str, Any], duration_minutes: float, interval_seconds: int = 10) -> List[Dict[str, Any]]:

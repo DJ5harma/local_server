@@ -89,11 +89,16 @@ class BackendSender:
     
     def send_sludge_data(self, data: Dict[str, Any]) -> bool:
         """
-        Send sludge data (t=0 or t=30) via 'sludge-data' event.
+        Send sludge data (t=30 final data) via 'sludge-data' event.
+        
+        NOTE: Only t=30 (final) data should be sent to backend. Backend stores
+        one record per factory/date/testType and replaces the entire data field
+        on update. Sending t=0 data is redundant as it gets overwritten.
+        
         Non-blocking - returns False if backend unavailable but doesn't raise.
         
         Args:
-            data: SludgeData dictionary matching backend format
+            data: SludgeData dictionary matching backend format (should be t=30 final data)
             
         Returns:
             True if sent successfully, False otherwise

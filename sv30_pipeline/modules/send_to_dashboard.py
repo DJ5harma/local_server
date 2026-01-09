@@ -1,9 +1,21 @@
 """
 Send to Dashboard Module
 
-Sends final results to Thermax dashboard via SocketIO.
-Uses exact format from backend documentation.
-Includes real RGB values from extraction.
+⚠️ DEPRECATED: This module is no longer used for sending data to the backend.
+
+Data sending is now handled by local_server/src/services/backend_client.py via
+the test_service.py workflow. This ensures:
+- No duplicate data sending
+- Consistent data format matching backend schema
+- Proper integration with the HMI test service
+
+This module is kept for reference only. Do not call send_results() from main.py.
+
+The correct data flow is:
+1. sv30_pipeline generates results (metrics, RGB values)
+2. sv30_data_provider.py reads results from pipeline
+3. test_service.py calls data_provider.generate_t30_data()
+4. backend_client.py sends data via Socket.IO with proper format
 
 Author: Jan 2026
 """
@@ -79,10 +91,21 @@ def send_results():
     """
     Send final metrics to dashboard via SocketIO.
     
+    ⚠️ DEPRECATED: This function should NOT be called.
+    Data sending is handled by local_server/src/services/backend_client.py
+    
+    This function is kept for reference only. If you need to send data,
+    use the test_service.py workflow instead.
+    
     Event: sludge-data
     Required fields: factoryCode, timestamp, testType, t_min, sludge_height_mm, 
                      mixture_height_mm, floc_count, floc_avg_size_mm
     """
+    # Early return to prevent accidental execution
+    logger.warning("⚠️ send_results() is deprecated and should not be called!")
+    logger.warning("   Data sending is handled by local_server/src/services/backend_client.py")
+    logger.warning("   This function returns immediately without sending data.")
+    return False
     logger.info("\n" + "="*70)
     logger.info("  SEND RESULTS TO DASHBOARD")
     logger.info("="*70)
