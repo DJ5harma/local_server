@@ -55,27 +55,77 @@ if [ ! -f "$PROJECT_DIR/run.py" ]; then
     exit 1
 fi
 
+# Check/create .env file
+if [ ! -f "$PROJECT_DIR/.env" ]; then
+    echo -e "${YELLOW}Creating .env file template...${NC}"
+    cat > "$PROJECT_DIR/.env" << EOF
+# Server Configuration
+PORT=5000
+HOST=0.0.0.0
+
+# Test Configuration
+TEST_DURATION_MINUTES=31
+
+# Backend Configuration
+BACKEND_URL=http://localhost:4000
+FACTORY_CODE=factory-a
+EOF
+    echo -e "${GREEN}✓ Created .env file template${NC}"
+    echo -e "${YELLOW}  Please edit $PROJECT_DIR/.env if you need to change settings${NC}"
+else
+    echo -e "${GREEN}✓ .env file exists${NC}"
+fi
+
+# Ensure required directories exist
+echo -e "${YELLOW}Checking required directories...${NC}"
+mkdir -p "$PROJECT_DIR/results"
+mkdir -p "$PROJECT_DIR/static"
+if [ -d "$PROJECT_DIR/results" ] && [ -d "$PROJECT_DIR/static" ]; then
+    echo -e "${GREEN}✓ Required directories exist${NC}"
+else
+    echo -e "${RED}✗ Failed to create required directories${NC}"
+    exit 1
+fi
+echo ""
+
 echo -e "${YELLOW}Step 1: Making scripts executable...${NC}"
 chmod +x "$PROJECT_DIR/scripts/launch_browser.sh"
 chmod +x "$PROJECT_DIR/scripts/close_browser.sh"
 chmod +x "$PROJECT_DIR/scripts/setup_autostart.sh"
+chmod +x "$PROJECT_DIR/scripts/start_hmi.sh"
+chmod +x "$PROJECT_DIR/scripts/stop_hmi.sh"
+chmod +x "$PROJECT_DIR/scripts/check_browser.sh"
 echo -e "${GREEN}✓ Scripts are executable${NC}"
 echo ""
 
 # Update service files with correct paths
 echo -e "${YELLOW}Step 2: Updating service files with correct paths...${NC}"
 
-# Create a temporary copy of the service file
+# Create a temporary copy of the service file with correct paths
 TEMP_SERVICE=$(mktemp)
 sed "s|/home/pi/ThermaxDashboard/local_server|$PROJECT_DIR|g; s|User=pi|User=$CURRENT_USER|g" \
     "$PROJECT_DIR/scripts/thermax-hmi.service" > "$TEMP_SERVICE"
+
+# Verify the temp service file was created correctly
+if [ ! -s "$TEMP_SERVICE" ]; then
+    echo -e "${RED}ERROR: Failed to create service file${NC}"
+    exit 1
+fi
 
 # Update desktop file with correct path
 TEMP_DESKTOP=$(mktemp)
 sed "s|/home/pi/ThermaxDashboard/local_server|$PROJECT_DIR|g" \
     "$PROJECT_DIR/scripts/thermax-browser.desktop" > "$TEMP_DESKTOP"
 
+# Verify the temp desktop file was created correctly
+if [ ! -s "$TEMP_DESKTOP" ]; then
+    echo -e "${RED}ERROR: Failed to create desktop file${NC}"
+    exit 1
+fi
+
 echo -e "${GREEN}✓ Service files updated${NC}"
+echo -e "${BLUE}  Project directory: $PROJECT_DIR${NC}"
+echo -e "${BLUE}  User: $CURRENT_USER${NC}"
 echo ""
 
 # Install systemd service for the server
@@ -83,7 +133,21 @@ echo -e "${YELLOW}Step 3: Installing systemd service for server...${NC}"
 sudo cp "$TEMP_SERVICE" /etc/systemd/system/thermax-hmi.service
 sudo systemctl daemon-reload
 sudo systemctl enable thermax-hmi.service
-echo -e "${GREEN}✓ Server service installed and enabled${NC}"
+
+# Try to start the service to verify it works
+echo -e "${BLUE}Starting service to verify configuration...${NC}"
+if sudo systemctl start thermax-hmi.service; then
+    sleep 3
+    if sudo systemctl is-active --quiet thermax-hmi.service; then
+        echo -e "${GREEN}✓ Server service installed, enabled, and started successfully${NC}"
+    else
+        echo -e "${YELLOW}⚠ Service installed but failed to start${NC}"
+        echo -e "${YELLOW}  Check logs with: sudo journalctl -u thermax-hmi.service -n 50${NC}"
+    fi
+else
+    echo -e "${RED}✗ Failed to start service${NC}"
+    echo -e "${YELLOW}  Check logs with: sudo journalctl -u thermax-hmi.service -n 50${NC}"
+fi
 echo ""
 
 # Install desktop autostart for browser
@@ -118,8 +182,23 @@ if [ $MISSING_DEPS -eq 1 ]; then
     echo ""
     echo -e "${YELLOW}Installing missing dependencies...${NC}"
     sudo apt update
-    sudo apt install -y chromium-browser curl
+    sudo apt install -y chromium-browser curl x11-utils
 fi
+
+# Verify X server is available (for browser launch)
+echo -e "${YELLOW}Step 6: Verifying X server availability...${NC}"
+if command -v xset &> /dev/null; then
+    if xset q &>/dev/null 2>&1 || [ -n "$DISPLAY" ]; then
+        echo -e "${GREEN}✓ X server is available${NC}"
+    else
+        echo -e "${YELLOW}⚠ X server not currently available (this is OK if not logged in yet)${NC}"
+        echo -e "${YELLOW}  Browser will wait for X server on boot${NC}"
+    fi
+else
+    echo -e "${YELLOW}⚠ xset not found, installing x11-utils...${NC}"
+    sudo apt install -y x11-utils
+fi
+echo ""
 
 echo ""
 echo -e "${GREEN}========================================${NC}"
@@ -129,26 +208,29 @@ echo ""
 echo -e "${BLUE}What was configured:${NC}"
 echo "  • Server service: /etc/systemd/system/thermax-hmi.service"
 echo "  • Browser autostart: $HOME/.config/autostart/thermax-browser.desktop"
+echo "  • Service will start automatically on boot"
+echo "  • Browser will launch 10 seconds after login"
 echo ""
-echo -e "${YELLOW}Next steps:${NC}"
-echo "  1. Test the server:"
-echo "     sudo systemctl start thermax-hmi.service"
+echo -e "${YELLOW}Verification:${NC}"
+echo "  1. Check service status:"
 echo "     sudo systemctl status thermax-hmi.service"
 echo ""
-echo "  2. Test the browser (after server is running):"
+echo "  2. Check service logs:"
+echo "     sudo journalctl -u thermax-hmi.service -n 50"
+echo ""
+echo "  3. Test browser launch manually:"
 echo "     $PROJECT_DIR/scripts/launch_browser.sh"
 echo ""
-echo "  3. View server logs:"
-echo "     sudo journalctl -u thermax-hmi.service -f"
-echo ""
-echo "  4. Reboot to test auto-start:"
-echo "     sudo reboot"
+echo -e "${YELLOW}Next steps:${NC}"
+echo "  • Reboot to test auto-start:"
+echo "    sudo reboot"
 echo ""
 echo -e "${BLUE}Useful commands:${NC}"
-echo "  • Stop server:     sudo systemctl stop thermax-hmi.service"
-echo "  • Restart server:  sudo systemctl restart thermax-hmi.service"
-echo "  • Close browser:   pkill chromium-browser"
-echo "  • Force close:     pkill -9 chromium-browser chromium chrome"
+echo "  • Start server:     sudo systemctl start thermax-hmi.service"
+echo "  • Stop server:      sudo systemctl stop thermax-hmi.service"
+echo "  • Restart server:   sudo systemctl restart thermax-hmi.service"
+echo "  • View logs:        sudo journalctl -u thermax-hmi.service -f"
+echo "  • Close browser:    pkill chromium-browser"
 echo "  • Disable auto-start: sudo systemctl disable thermax-hmi.service"
 echo ""
 echo -e "${GREEN}The system will automatically start on next boot!${NC}"

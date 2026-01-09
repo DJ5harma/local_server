@@ -1,6 +1,6 @@
 [Unit]
 Description=Thermax SV30 Test System HMI Server
-After=network.target
+After=network-online.target
 Wants=network-online.target
 
 [Service]
@@ -8,15 +8,21 @@ Type=simple
 User=pi
 WorkingDirectory=/home/pi/ThermaxDashboard/local_server
 Environment="PATH=/home/pi/ThermaxDashboard/local_server/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="DISPLAY=:0"
+Environment="HOME=/home/pi"
+# Load .env file if it exists
+EnvironmentFile=-/home/pi/ThermaxDashboard/local_server/.env
 ExecStart=/home/pi/ThermaxDashboard/local_server/venv/bin/python /home/pi/ThermaxDashboard/local_server/run.py
 Restart=always
 RestartSec=10
+# Wait up to 30 seconds for the service to start
+TimeoutStartSec=30
 StandardOutput=journal
 StandardError=journal
 
-# Security settings
-NoNewPrivileges=true
-PrivateTmp=true
+# Security settings (commented out to allow proper operation)
+# NoNewPrivileges=true
+# PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target
