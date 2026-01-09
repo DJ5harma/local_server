@@ -13,10 +13,10 @@ import json
 import logging
 import subprocess
 from typing import Dict, Any, List
-from datetime import datetime
 from pathlib import Path
 
 from .data_provider import DataProvider
+from ..utils.dateUtils import now_ist, now_ist_iso_utc, format_date_ist
 
 logger = logging.getLogger(__name__)
 
@@ -44,14 +44,15 @@ class SV30DataProvider(DataProvider):
     
     def generate_t0_data(self) -> Dict[str, Any]:
         """Generate t=0 data AND start video capture subprocess"""
-        now = datetime.now()
+        # Use IST time for all operations
+        now = now_ist()
         test_type = self._determine_test_type(now.hour)
         # Use same test ID format as dummy provider for consistency
-        date_str = now.strftime("%Y-%m-%d")
+        date_str = format_date_ist(now)
         test_type_code = test_type[1]
         self.current_test_id = f"SV30-{date_str}-001-{test_type_code}"
         
-        logger.info(f"[SV30] 🚀 Starting test: {self.current_test_id}")
+        logger.info(f"[SV30] 🚀 Starting test: {self.current_test_id} (IST: {now.strftime('%Y-%m-%d %H:%M:%S')})")
         
         # Start subprocess
         started = self._start_capture_subprocess()
@@ -59,10 +60,9 @@ class SV30DataProvider(DataProvider):
         if not started:
             raise Exception("Failed to start SV30 capture subprocess")
         
-        # Ensure timestamp has Z suffix for ISO 8601 UTC format
-        timestamp = now.isoformat()
-        if not timestamp.endswith('Z'):
-            timestamp = timestamp + "Z"
+        # Get timestamp in UTC format (for backend compatibility)
+        # The time represents IST moment but formatted as UTC ISO string
+        timestamp = now_ist_iso_utc()
         
         # Use default RGB values (will be updated from pipeline results at t=30)
         rgb_clear_zone = {"r": 255, "g": 255, "b": 255}
@@ -125,11 +125,9 @@ class SV30DataProvider(DataProvider):
         else:
             logger.warning(f"[SV30] RGB file not found: {rgb_file}, using fallback values")
         
-        # Create timestamp at end of test duration
-        now = datetime.now()
-        timestamp = now.isoformat()
-        if not timestamp.endswith('Z'):
-            timestamp = timestamp + "Z"
+        # Create timestamp at end of test duration (using IST)
+        # Get current IST time and convert to UTC ISO format for backend
+        timestamp = now_ist_iso_utc()
         
         logger.info(f"[SV30] SV30: {metrics['sv30_pct']}%")
         
@@ -160,7 +158,8 @@ class SV30DataProvider(DataProvider):
             logs_dir = os.path.join(self.sv30_path, "logs")
             os.makedirs(logs_dir, exist_ok=True)
             
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            # Use IST time for log filename
+            timestamp = now_ist().strftime('%Y%m%d_%H%M%S')
             log_file = os.path.join(logs_dir, f"sv30_{timestamp}.log")
             
             logger.info(f"[SV30] Starting subprocess...")

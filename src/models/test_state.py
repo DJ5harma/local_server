@@ -4,7 +4,6 @@ Thread-safe state management.
 """
 import threading
 import time
-from datetime import datetime
 from enum import Enum
 from typing import Optional, Dict, Any
 

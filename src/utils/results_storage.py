@@ -5,7 +5,7 @@ import logging
 import json
 from pathlib import Path
 from typing import Dict, Any, Optional
-from datetime import datetime
+from .dateUtils import now_ist_iso_utc, format_date_ist, parse_iso_to_ist
 from ..config import Config
 
 logger = logging.getLogger(__name__)
@@ -39,14 +39,16 @@ def save_sludge_data(data: Dict[str, Any]) -> Optional[str]:
         
         # Extract test ID and timestamp
         test_id = data.get("testId", "unknown")
-        timestamp = data.get("timestamp", datetime.now().isoformat())
+        timestamp = data.get("timestamp", now_ist_iso_utc())
         t_min = data.get("t_min", "unknown")
         
-        # Parse date from timestamp (format: YYYY-MM-DDTHH:MM:SS)
+        # Parse date from timestamp - convert to IST first, then extract date
+        # This ensures correct date even if UTC timestamp is from previous day
         try:
-            date_str = timestamp.split("T")[0] if "T" in timestamp else datetime.now().strftime("%Y-%m-%d")
+            dt_ist = parse_iso_to_ist(timestamp)
+            date_str = format_date_ist(dt_ist)
         except:
-            date_str = datetime.now().strftime("%Y-%m-%d")
+            date_str = format_date_ist()
         
         # Create date folder
         date_dir = results_dir / date_str
@@ -86,15 +88,17 @@ def save_height_update(height_mm: float, timestamp: Optional[str] = None,
     try:
         results_dir = ensure_results_dir()
         
-        # Use current time if timestamp not provided
+        # Use current IST time (converted to UTC) if timestamp not provided
         if timestamp is None:
-            timestamp = datetime.now().isoformat() + "Z"
+            timestamp = now_ist_iso_utc()
         
-        # Parse date from timestamp
+        # Parse date from timestamp - convert to IST first, then extract date
+        # This ensures correct date even if UTC timestamp is from previous day
         try:
-            date_str = timestamp.split("T")[0] if "T" in timestamp else datetime.now().strftime("%Y-%m-%d")
+            dt_ist = parse_iso_to_ist(timestamp)
+            date_str = format_date_ist(dt_ist)
         except:
-            date_str = datetime.now().strftime("%Y-%m-%d")
+            date_str = format_date_ist()
         
         # Create date folder
         date_dir = results_dir / date_str

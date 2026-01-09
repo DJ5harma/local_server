@@ -4,7 +4,7 @@ API routes for the HMI server (Flask version).
 Routes are thin wrappers that delegate to service layer.
 """
 import logging
-from datetime import datetime
+from ..utils.dateUtils import now_ist_iso_utc
 from typing import Dict, Any
 from flask import request, jsonify
 
@@ -174,7 +174,7 @@ def register_routes(app):
                     # Send a test message
                     test_data = {
                         "testId": "TEST-CONNECTION",
-                        "timestamp": datetime.now().isoformat() + "Z",
+                        "timestamp": now_ist_iso_utc(),
                         "testType": "morning",
                         "factoryCode": factory_code,
                         "t_min": 0,

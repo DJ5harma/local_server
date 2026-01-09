@@ -8,7 +8,6 @@ with the backend.
 import logging
 import threading
 from typing import Dict, Any, Optional
-from datetime import datetime
 
 from ..models import TestStateManager, TestState
 from ..models.types import SludgeData

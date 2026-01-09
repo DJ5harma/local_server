@@ -6,9 +6,9 @@ import logging
 import socketio
 import socketio.exceptions
 from typing import Dict, Any, Optional
-from datetime import datetime
 from ..config import Config
 from ..utils.results_storage import save_sludge_data, save_height_update
+from ..utils.dateUtils import now_ist_iso_utc
 
 logger = logging.getLogger(__name__)
 
@@ -191,7 +191,8 @@ class BackendSender:
         
         try:
             if timestamp is None:
-                timestamp = datetime.now().isoformat() + "Z"
+                # Use IST time converted to UTC ISO format
+                timestamp = now_ist_iso_utc()
             
             update_data = {
                 "factoryCode": self.factory_code,
@@ -236,7 +237,8 @@ class BackendSender:
         
         try:
             if date is None:
-                date = datetime.now().strftime("%Y-%m-%d")
+                from ..utils.dateUtils import format_date_ist
+                date = format_date_ist()
             
             warning_data = {
                 "factoryCode": self.factory_code,
