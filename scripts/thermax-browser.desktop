@@ -8,4 +8,6 @@ Terminal=false
 Categories=Network;WebBrowser;
 X-GNOME-Autostart-enabled=true
 StartupNotify=false
+# Wait 10 seconds after login before launching browser (gives server time to start)
+X-GNOME-Autostart-Delay=10
 
