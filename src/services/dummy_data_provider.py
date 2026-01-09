@@ -7,11 +7,12 @@ implementation by creating a new class that implements DataProvider.
 """
 import random
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta, timezone
 from typing import Dict, List, Any
 
 from .data_provider import DataProvider
 from ..exceptions import DataGenerationError
+from ..utils.dateUtils import now_ist, now_ist_iso_utc, parse_iso_to_ist, add_minutes_ist, format_date_ist
 from ..constants import (
     MORNING_START_HOUR,
     MORNING_END_HOUR,
@@ -90,30 +91,34 @@ class DummyDataProvider(DataProvider):
             floc_count = random.randint(40, 80)
             floc_avg_size = random.uniform(1.5, 3.5)  # mm
             
-            # Determine test type based on current time
-            now = datetime.now()
+            # Determine test type based on current IST time
+            now = now_ist()
             current_hour = now.hour
             test_type, test_type_code = _determine_test_type(current_hour)
             
-            # Create test ID with appropriate type code
-            date_str = now.strftime("%Y-%m-%d")
+            # Create test ID with appropriate type code (using IST date)
+            date_str = format_date_ist(now)
             test_id = f"SV30-{date_str}-001-{test_type_code}"
             
-            logger.info(f"Generated t=0 data: hour={current_hour}, test_type={test_type} ({test_type_code})")
+            logger.info(f"Generated t=0 data: hour={current_hour} IST, test_type={test_type} ({test_type_code})")
+            
+            # Get timestamp in UTC format (for backend compatibility)
+            # The time represents IST moment but formatted as UTC ISO string
+            timestamp = now_ist_iso_utc()
             
             return {
                 "testId": test_id,
-                "timestamp": now.isoformat() + "Z",
+                "timestamp": timestamp,
                 "testType": test_type,
                 "operator": "Operator",
                 "t_min": 0,
-                "sludge_height_mm": initial_sludge_height,
-                "mixture_height_mm": mixture_height,
+                "sludge_height_mm": round(initial_sludge_height, 2),
+                "mixture_height_mm": round(mixture_height, 2),
                 "floc_count": floc_count,
-                "floc_avg_size_mm": floc_avg_size,
+                "floc_avg_size_mm": round(floc_avg_size, 2),
                 "rgb_clear_zone": rgb_clear_zone,
                 "rgb_sludge_zone": rgb_sludge_zone,
-                "velocity_mm_per_min": 0,  # No velocity at t=0
+                "velocity_mm_per_min": 0.0,  # No velocity at t=0
             }
         except Exception as e:
             logger.error(f"Failed to generate t=0 data: {e}")
@@ -157,11 +162,14 @@ class DummyDataProvider(DataProvider):
                 if test_duration_minutes > 0 else 0
             )
             
-            # Create timestamp at end of test duration
-            initial_timestamp = datetime.fromisoformat(
-                initial_data["timestamp"].replace("Z", "+00:00")
-            )
-            final_timestamp = initial_timestamp + timedelta(minutes=test_duration_minutes)
+            # Create timestamp at end of test duration (in IST)
+            # Parse initial timestamp and add duration
+            initial_timestamp = parse_iso_to_ist(initial_data["timestamp"])
+            final_timestamp = add_minutes_ist(initial_timestamp, test_duration_minutes)
+            
+            # Convert to UTC ISO format for backend (represents IST moment as UTC)
+            final_timestamp_utc = final_timestamp.astimezone(timezone.utc)
+            timestamp = final_timestamp_utc.isoformat().replace("+00:00", "Z")
             
             # Update RGB values slightly (clear zone might become clearer)
             rgb_clear_zone = {
@@ -174,17 +182,17 @@ class DummyDataProvider(DataProvider):
             
             return {
                 "testId": initial_data["testId"],
-                "timestamp": final_timestamp.isoformat().replace("+00:00", "Z"),
+                "timestamp": timestamp,
                 "testType": initial_data.get("testType", "morning"),
                 "operator": initial_data.get("operator", "Operator"),
                 "t_min": int(test_duration_minutes),
-                "sludge_height_mm": final_sludge_height,
-                "mixture_height_mm": mixture_height,
-                "sv30_height_mm": final_sludge_height,
+                "sludge_height_mm": round(final_sludge_height, 2),
+                "mixture_height_mm": round(mixture_height, 2),
+                "sv30_height_mm": round(final_sludge_height, 2),
                 "sv30_mL_per_L": round(sv30_mL_per_L, 1),
                 "velocity_mm_per_min": round(velocity_mm_per_min, 2),
                 "floc_count": initial_data["floc_count"],
-                "floc_avg_size_mm": initial_data["floc_avg_size_mm"],
+                "floc_avg_size_mm": round(initial_data["floc_avg_size_mm"], 2),
                 "rgb_clear_zone": rgb_clear_zone,
                 "rgb_sludge_zone": initial_data["rgb_sludge_zone"],
             }
@@ -222,10 +230,8 @@ class DummyDataProvider(DataProvider):
             settling_factor = random.uniform(0.6, 0.9)
             final_height = initial_height * settling_factor
             
-            # Generate measurements at intervals
-            start_time = datetime.fromisoformat(
-                initial_data["timestamp"].replace("Z", "+00:00")
-            )
+            # Generate measurements at intervals (using IST)
+            start_time = parse_iso_to_ist(initial_data["timestamp"])
             total_seconds = duration_minutes * 60
             
             # For very short durations, ensure at least 2 measurements (start and end)
@@ -258,14 +264,18 @@ class DummyDataProvider(DataProvider):
                 current_height += random.uniform(-2, 2)
                 current_height = max(0, min(mixture_height, current_height))  # Clamp to valid range
                 
-                # Calculate measurement time properly using timedelta
+                # Calculate measurement time properly using timedelta (in IST)
                 measurement_time = start_time + timedelta(seconds=elapsed_seconds)
                 timestamp_ms = int(measurement_time.timestamp() * 1000)
+                
+                # Convert to UTC ISO format for backend compatibility
+                measurement_time_utc = measurement_time.astimezone(timezone.utc)
+                date_time_utc = measurement_time_utc.isoformat().replace("+00:00", "Z")
                 
                 history.append({
                     "timestamp": timestamp_ms,
                     "height": round(current_height, 2),
-                    "dateTime": measurement_time.isoformat().replace("+00:00", "Z"),
+                    "dateTime": date_time_utc,
                     "testType": initial_data.get("testType", "morning")
                 })
             

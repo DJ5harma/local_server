@@ -4,7 +4,7 @@ This guide explains how to integrate your ML model with the Thermax SV30 Test Sy
 
 ## Overview
 
-The HMI server uses a **DataProvider** interface pattern that allows you to easily swap between dummy data generation and your ML model. The interface is defined in `src/services/data_provider.py` and currently uses `DummyDataProvider` for testing.
+The HMI server uses a **DataProvider** interface pattern that allows you to easily swap between different data sources. The interface is defined in `src/services/data_provider.py`. Currently, `SV30DataProvider` is used by default (real pipeline integration), but you can switch to `DummyDataProvider` for testing or create your own ML model provider.
 
 ## Architecture
 
@@ -38,10 +38,10 @@ ML Model Data Provider for SV30 Test System.
 Replace DummyDataProvider with this implementation to use your ML model.
 """
 from typing import Dict, Any, List
-from datetime import datetime
 from .data_provider import DataProvider
 from ..models.types import SludgeData, SludgeHeightEntry
 from ..exceptions import DataGenerationError
+from ..utils.dateUtils import now_ist, now_ist_iso_utc, parse_iso_to_ist, add_minutes_ist, format_date_ist
 import logging
 
 logger = logging.getLogger(__name__)
@@ -103,13 +103,19 @@ class MLDataProvider(DataProvider):
             # etc.
             
             # 5. Format as SludgeData
-            now = datetime.now()
+            # Use IST timezone for all operations
+            now = now_ist()
             test_type = self._determine_test_type(now.hour)
+            date_str = format_date_ist(now)
+            
+            # Get timestamp in UTC format (for backend compatibility)
+            timestamp = now_ist_iso_utc()
             
             data: SludgeData = {
-                "testId": f"SV30-{now.strftime('%Y-%m-%d')}-001-{test_type[1]}",
-                "timestamp": now.isoformat(),
+                "testId": f"SV30-{date_str}-001-{test_type[1]}",
+                "timestamp": timestamp,  # UTC ISO format
                 "testType": test_type[0],
+                "operator": "Operator",
                 "sludge_height_mm": 0.0,  # Replace with ML model output
                 "mixture_height_mm": 0.0,  # Replace with ML model output
                 "floc_count": 0,  # Replace with ML model output
@@ -171,8 +177,10 @@ class MLDataProvider(DataProvider):
             # sv30_mL_per_L = (sv30_height / initial_data['mixture_height_mm']) * 1000
             # velocity = sv30_height / test_duration_minutes
             
-            now = datetime.now()
-            test_id = initial_data.get("testId", f"SV30-{now.strftime('%Y-%m-%d')}-001")
+            # Use IST timezone for all operations
+            now = now_ist()
+            date_str = format_date_ist(now)
+            test_id = initial_data.get("testId", f"SV30-{date_str}-001")
             
             # Example calculations (replace with your ML model outputs)
             final_sludge_height = 0.0  # From ML model
@@ -180,18 +188,24 @@ class MLDataProvider(DataProvider):
             sv30_mL_per_L = (final_sludge_height / final_mixture_height) * 1000
             velocity = final_sludge_height / test_duration_minutes if test_duration_minutes > 0 else 0
             
+            # Get timestamp in UTC format (for backend compatibility)
+            timestamp = now_ist_iso_utc()
+            
             data: SludgeData = {
                 "testId": test_id,
-                "timestamp": now.isoformat(),
-                "testType": initial_data.get("testType"),
-                "sludge_height_mm": final_sludge_height,  # From ML model
-                "mixture_height_mm": final_mixture_height,
-                "sv30_height_mm": final_sludge_height,
-                "sv30_mL_per_L": sv30_mL_per_L,
-                "velocity_mm_per_min": velocity,
+                "timestamp": timestamp,  # UTC ISO format
+                "testType": initial_data.get("testType", "morning"),
+                "operator": initial_data.get("operator", "Operator"),
+                "t_min": int(test_duration_minutes),
+                "sludge_height_mm": round(final_sludge_height, 2),  # From ML model
+                "mixture_height_mm": round(final_mixture_height, 2),
+                "sv30_height_mm": round(final_sludge_height, 2),
+                "sv30_mL_per_L": round(sv30_mL_per_L, 1),
+                "velocity_mm_per_min": round(velocity, 2),
                 "floc_count": 0,  # From ML model
                 "floc_avg_size_mm": 0.0,  # From ML model
-                "t_min": int(test_duration_minutes),
+                "rgb_clear_zone": initial_data.get("rgb_clear_zone", {"r": 255, "g": 255, "b": 255}),
+                "rgb_sludge_zone": initial_data.get("rgb_sludge_zone", {"r": 200, "g": 180, "b": 150}),
                 # Optional fields
                 "image_filename": f"t30_{now.strftime('%Y%m%d_%H%M%S')}.jpg",
                 "image_path": f"/path/to/images/t30_{now.strftime('%Y%m%d_%H%M%S')}.jpg",
@@ -235,14 +249,21 @@ class MLDataProvider(DataProvider):
             # Option 2: Real-time processing (capture and process each interval)
             
             entries: List[Dict[str, Any]] = []
-            start_time = datetime.fromisoformat(initial_data["timestamp"])
+            # Parse timestamp and convert to IST
+            start_time = parse_iso_to_ist(initial_data["timestamp"])
             test_type = initial_data.get("testType")
             
             num_intervals = int((duration_minutes * 60) / interval_seconds)
             
             for i in range(num_intervals):
                 elapsed_seconds = i * interval_seconds
-                timestamp = start_time.timestamp() + elapsed_seconds
+                measurement_time = start_time + timedelta(seconds=elapsed_seconds)
+                timestamp_ms = int(measurement_time.timestamp() * 1000)
+                
+                # Convert to UTC ISO format for backend compatibility
+                from datetime import timezone
+                measurement_time_utc = measurement_time.astimezone(timezone.utc)
+                date_time_utc = measurement_time_utc.isoformat().replace("+00:00", "Z")
                 
                 # TODO: Replace with ML model call for this time point
                 # Option 1: If you have a time-series model
@@ -256,8 +277,8 @@ class MLDataProvider(DataProvider):
                 height = 0.0  # Replace with ML model output
                 
                 entry: SludgeHeightEntry = {
-                    "timestamp": int(timestamp),
-                    "dateTime": datetime.fromtimestamp(timestamp).isoformat(),
+                    "timestamp": timestamp_ms,
+                    "dateTime": date_time_utc,  # UTC ISO format
                     "height": height,
                     "testType": test_type,
                 }
@@ -284,12 +305,16 @@ class MLDataProvider(DataProvider):
 Edit `src/app.py` and replace the data provider initialization:
 
 ```python
-# Find this line (around line 67):
-data_provider = DummyDataProvider()
+# Find this line (around line 70):
+data_provider = SV30DataProvider(sv30_path=sv30_path)
 
 # Replace with:
-from src.services.ml_data_provider import MLDataProvider
+from .services.ml_data_provider import MLDataProvider
 data_provider = MLDataProvider(model_path="/path/to/your/model.pth")  # Or your model path
+
+# Or to use dummy data for testing:
+# from .services.dummy_data_provider import DummyDataProvider
+# data_provider = DummyDataProvider()
 ```
 
 ### Step 3: Install ML Dependencies
@@ -320,8 +345,10 @@ Your ML model must return data matching this structure:
 ```python
 {
     "testId": str,                    # e.g., "SV30-2026-01-03-001-A"
-    "timestamp": str,                 # ISO format: "2026-01-03T10:30:00"
-    "testType": str,                 # "morning" | "afternoon" | "evening"
+    "timestamp": str,                 # REQUIRED: ISO format UTC: "2026-01-03T10:30:00Z" (IST converted to UTC)
+    "testType": str,                  # Optional: "morning" | "afternoon" | "evening"
+    "operator": str,                  # Optional: Operator name
+    "t_min": int,                     # Optional: Time in minutes (0 for t0, 30 for t30)
     "sludge_height_mm": float,       # REQUIRED: Sludge height in mm
     "mixture_height_mm": float,       # REQUIRED: Total mixture height in mm
     "sv30_height_mm": float,          # Optional: SV30 height (for t30)
@@ -330,12 +357,11 @@ Your ML model must return data matching this structure:
     "floc_count": int,               # REQUIRED: Number of flocs detected
     "floc_avg_size_mm": float,        # REQUIRED: Average floc size in mm
     "rgb_clear_zone": {               # Optional: RGB values for clear zone
-        "r": int, "g": int, "b": int
+        "r": int, "g": int, "b": int  # Values 0-255
     },
     "rgb_sludge_zone": {              # Optional: RGB values for sludge zone
-        "r": int, "g": int, "b": int
+        "r": int, "g": int, "b": int  # Values 0-255
     },
-    "t_min": int,                     # Optional: Time in minutes (0 for t0, 30 for t30)
     "image_filename": str,           # Optional: Image filename
     "image_path": str,                # Optional: Full path to image
 }
@@ -348,7 +374,7 @@ For height history updates:
 ```python
 {
     "timestamp": int,                 # Unix timestamp
-    "dateTime": str,                  # ISO format datetime string
+    "dateTime": str,                  # ISO format UTC datetime string: "2026-01-03T10:30:00Z"
     "height": float,                  # Sludge height in mm at this time
     "testType": str,                  # "morning" | "afternoon" | "evening"
 }
@@ -450,16 +476,20 @@ except Exception as e:
 
 ## Best Practices
 
-1. **Caching**: Cache model loading - don't reload the model on every call
-2. **Error Handling**: Always handle ML model failures gracefully
-3. **Logging**: Log ML model inputs/outputs for debugging
-4. **Performance**: Optimize inference time - tests run for 30 minutes
-5. **Image Storage**: Save processed images for debugging/analysis
-6. **Validation**: Validate ML model outputs match expected ranges
+1. **Timezone**: Always use IST timezone utilities from `src/utils/dateUtils.py` - never use `datetime.now()` directly
+2. **Caching**: Cache model loading - don't reload the model on every call
+3. **Error Handling**: Always handle ML model failures gracefully, raise `DataGenerationError` on failures
+4. **Logging**: Log ML model inputs/outputs for debugging
+5. **Performance**: Optimize inference time - tests run for 30 minutes
+6. **Image Storage**: Save processed images for debugging/analysis
+7. **Validation**: Validate ML model outputs match expected ranges
+8. **Data Format**: Ensure all returned data matches backend schema exactly (see `src/models/types.py`)
+9. **Backend Sending**: Only t=30 data is sent to backend - t=0 is kept locally for frontend display
+10. **Rounding**: Round numeric values appropriately (heights: 2 decimals, SV30: 1 decimal, velocity: 2 decimals)
 
 ## Example: Complete Integration
 
-See `src/services/dummy_data_provider.py` for a complete reference implementation that you can use as a template.
+See `src/services/dummy_data_provider.py` or `src/services/sv30_data_provider.py` for complete reference implementations that you can use as templates.
 
 ## Troubleshooting
 
@@ -469,9 +499,12 @@ See `src/services/dummy_data_provider.py` for a complete reference implementatio
 - Check dependencies are installed
 
 ### Data Format Errors
-- Verify return types match `SludgeData` interface
-- Check all required fields are present
+- Verify return types match `SludgeData` interface exactly
+- Check all required fields are present: `timestamp`, `sludge_height_mm`, `mixture_height_mm`, `floc_count`, `floc_avg_size_mm`
 - Ensure numeric types are correct (float vs int)
+- Verify timestamps are in UTC ISO format with Z suffix (use `now_ist_iso_utc()`)
+- Check that IST timezone utilities are used for all datetime operations
+- Ensure data format matches backend schema exactly (see `src/models/types.py`)
 
 ### Performance Issues
 - Profile model inference time

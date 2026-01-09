@@ -6,9 +6,9 @@ import logging
 import socketio
 import socketio.exceptions
 from typing import Dict, Any, Optional
-from datetime import datetime
 from ..config import Config
 from ..utils.results_storage import save_sludge_data, save_height_update
+from ..utils.dateUtils import now_ist_iso_utc
 
 logger = logging.getLogger(__name__)
 
@@ -89,11 +89,16 @@ class BackendSender:
     
     def send_sludge_data(self, data: Dict[str, Any]) -> bool:
         """
-        Send sludge data (t=0 or t=30) via 'sludge-data' event.
+        Send sludge data (t=30 final data) via 'sludge-data' event.
+        
+        NOTE: Only t=30 (final) data should be sent to backend. Backend stores
+        one record per factory/date/testType and replaces the entire data field
+        on update. Sending t=0 data is redundant as it gets overwritten.
+        
         Non-blocking - returns False if backend unavailable but doesn't raise.
         
         Args:
-            data: SludgeData dictionary matching backend format
+            data: SludgeData dictionary matching backend format (should be t=30 final data)
             
         Returns:
             True if sent successfully, False otherwise
@@ -186,7 +191,8 @@ class BackendSender:
         
         try:
             if timestamp is None:
-                timestamp = datetime.now().isoformat() + "Z"
+                # Use IST time converted to UTC ISO format
+                timestamp = now_ist_iso_utc()
             
             update_data = {
                 "factoryCode": self.factory_code,
@@ -231,7 +237,8 @@ class BackendSender:
         
         try:
             if date is None:
-                date = datetime.now().strftime("%Y-%m-%d")
+                from ..utils.dateUtils import format_date_ist
+                date = format_date_ist()
             
             warning_data = {
                 "factoryCode": self.factory_code,

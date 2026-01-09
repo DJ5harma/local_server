@@ -205,13 +205,20 @@ def main():
         # ==========================================
         # STAGE 8: SEND TO DASHBOARD
         # ==========================================
+        # NOTE: Data sending is now handled by local_server/src/services/backend_client.py
+        # The sv30_pipeline should only generate results, not send them directly.
+        # This prevents duplicate data sending and ensures consistent data format.
         print_stage_header(8, TOTAL_STAGES, "SEND TO DASHBOARD")
         stage_start = time.time()
         
-        if config.SOCKETIO_ENABLED:
-            send_results()
-        else:
-            logger.info("SocketIO disabled - skipping dashboard send")
+        # DISABLED: Data sending is handled by local_server/src/services/backend_client.py
+        # The test_service.py calls data_provider.generate_t30_data() which reads results
+        # from this pipeline and sends them via backend_client.send_sludge_data()
+        # if config.SOCKETIO_ENABLED:
+        #     send_results()
+        # else:
+        #     logger.info("SocketIO disabled - skipping dashboard send")
+        logger.info("Data sending handled by local_server/src/services/backend_client.py")
         
         print_stage_complete("Send to Dashboard", time.time() - stage_start)
         
