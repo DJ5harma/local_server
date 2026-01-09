@@ -65,8 +65,11 @@ class SV30DataProvider(DataProvider):
         timestamp = now_ist_iso_utc()
         
         # Use default RGB values (will be updated from pipeline results at t=30)
-        rgb_clear_zone = {"r": 255, "g": 255, "b": 255}
-        rgb_sludge_zone = {"r": 200, "g": 180, "b": 150}
+        # Ensure these are integers
+        rgb_clear_zone = {"r": int(255), "g": int(255), "b": int(255)}
+        rgb_sludge_zone = {"r": int(200), "g": int(180), "b": int(150)}
+        
+        logger.info(f"[SV30] 📤 t=0 data RGB - Clear: {{r: {rgb_clear_zone['r']}, g: {rgb_clear_zone['g']}, b: {rgb_clear_zone['b']}}}, Sludge: {{r: {rgb_sludge_zone['r']}, g: {rgb_sludge_zone['g']}, b: {rgb_sludge_zone['b']}}}")
         
         return {
             "testId": self.current_test_id,
@@ -110,26 +113,78 @@ class SV30DataProvider(DataProvider):
             metrics = json.load(f)
         
         # Load RGB values from pipeline results
-        rgb_clear_zone = {"r": 245, "g": 250, "b": 255}  # Fallback
-        rgb_sludge_zone = {"r": 180, "g": 160, "b": 140}  # Fallback
+        # Fallback values (non-zero, realistic defaults)
+        rgb_clear_zone = {"r": 245, "g": 250, "b": 255}
+        rgb_sludge_zone = {"r": 180, "g": 160, "b": 140}
         
         if os.path.exists(rgb_file):
             try:
                 with open(rgb_file, 'r') as f:
                     rgb_data = json.load(f)
-                rgb_clear_zone = rgb_data.get('clear_zone', {}).get('rgb', rgb_clear_zone)
-                rgb_sludge_zone = rgb_data.get('sludge_zone', {}).get('rgb', rgb_sludge_zone)
-                logger.info(f"[SV30] Loaded RGB values from pipeline results")
+                
+                # Extract RGB values with proper error handling
+                clear_rgb_raw = rgb_data.get('clear_zone', {}).get('rgb', None)
+                sludge_rgb_raw = rgb_data.get('sludge_zone', {}).get('rgb', None)
+                
+                # Validate and convert to integers
+                if clear_rgb_raw:
+                    try:
+                        rgb_clear_zone = {
+                            "r": int(clear_rgb_raw.get('r', 245)),
+                            "g": int(clear_rgb_raw.get('g', 250)),
+                            "b": int(clear_rgb_raw.get('b', 255))
+                        }
+                        # Validate range
+                        rgb_clear_zone["r"] = max(0, min(255, rgb_clear_zone["r"]))
+                        rgb_clear_zone["g"] = max(0, min(255, rgb_clear_zone["g"]))
+                        rgb_clear_zone["b"] = max(0, min(255, rgb_clear_zone["b"]))
+                        logger.info(f"[SV30] ✅ Loaded clear zone RGB: {{r: {rgb_clear_zone['r']}, g: {rgb_clear_zone['g']}, b: {rgb_clear_zone['b']}}}")
+                    except (ValueError, TypeError, AttributeError) as e:
+                        logger.warning(f"[SV30] ⚠️  Invalid clear zone RGB format: {e}, using fallback")
+                else:
+                    logger.warning(f"[SV30] ⚠️  No clear zone RGB in JSON, using fallback")
+                
+                if sludge_rgb_raw:
+                    try:
+                        rgb_sludge_zone = {
+                            "r": int(sludge_rgb_raw.get('r', 180)),
+                            "g": int(sludge_rgb_raw.get('g', 160)),
+                            "b": int(sludge_rgb_raw.get('b', 140))
+                        }
+                        # Validate range
+                        rgb_sludge_zone["r"] = max(0, min(255, rgb_sludge_zone["r"]))
+                        rgb_sludge_zone["g"] = max(0, min(255, rgb_sludge_zone["g"]))
+                        rgb_sludge_zone["b"] = max(0, min(255, rgb_sludge_zone["b"]))
+                        logger.info(f"[SV30] ✅ Loaded sludge zone RGB: {{r: {rgb_sludge_zone['r']}, g: {rgb_sludge_zone['g']}, b: {rgb_sludge_zone['b']}}}")
+                    except (ValueError, TypeError, AttributeError) as e:
+                        logger.warning(f"[SV30] ⚠️  Invalid sludge zone RGB format: {e}, using fallback")
+                else:
+                    logger.warning(f"[SV30] ⚠️  No sludge zone RGB in JSON, using fallback")
+                
+                # Check if values are all zeros (should not happen)
+                if rgb_clear_zone["r"] == 0 and rgb_clear_zone["g"] == 0 and rgb_clear_zone["b"] == 0:
+                    logger.error(f"[SV30] ❌ Clear zone RGB is all zeros! Using fallback instead")
+                    rgb_clear_zone = {"r": 245, "g": 250, "b": 255}
+                
+                if rgb_sludge_zone["r"] == 0 and rgb_sludge_zone["g"] == 0 and rgb_sludge_zone["b"] == 0:
+                    logger.error(f"[SV30] ❌ Sludge zone RGB is all zeros! Using fallback instead")
+                    rgb_sludge_zone = {"r": 180, "g": 160, "b": 140}
+                    
             except Exception as e:
-                logger.warning(f"[SV30] Failed to load RGB values: {e}, using fallback")
+                logger.error(f"[SV30] ❌ Failed to load RGB values: {e}, using fallback")
+                import traceback
+                logger.debug(traceback.format_exc())
         else:
-            logger.warning(f"[SV30] RGB file not found: {rgb_file}, using fallback values")
+            logger.warning(f"[SV30] ⚠️  RGB file not found: {rgb_file}, using fallback values")
         
         # Create timestamp at end of test duration (using IST)
         # Get current IST time and convert to UTC ISO format for backend
         timestamp = now_ist_iso_utc()
         
         logger.info(f"[SV30] SV30: {metrics['sv30_pct']}%")
+        
+        # Log final RGB values being returned
+        logger.info(f"[SV30] 📤 t=30 data RGB - Clear: {{r: {rgb_clear_zone['r']}, g: {rgb_clear_zone['g']}, b: {rgb_clear_zone['b']}}}, Sludge: {{r: {rgb_sludge_zone['r']}, g: {rgb_sludge_zone['g']}, b: {rgb_sludge_zone['b']}}}")
         
         return {
             "testId": initial_data.get("testId"),

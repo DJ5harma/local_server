@@ -1,5 +1,9 @@
 #!/bin/bash
 # Simple script to stop the Thermax HMI server and browser
+# 
+# IMPORTANT: This script ONLY stops the local_server and browser processes.
+# It does NOT shut down, reboot, or affect the Raspberry Pi system in any way.
+# The device will continue running normally after stopping the HMI.
 
 set -e
 

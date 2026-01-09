@@ -157,6 +157,19 @@ class BackendSender:
                 logger.debug(f"   t_min: {data_with_factory.get('t_min', 'N/A')}")
                 logger.debug(f"   Factory: {data_with_factory.get('factoryCode', 'N/A')}")
                 
+                # Log RGB values before sending
+                rgb_clear = data_with_factory.get('rgb_clear_zone')
+                rgb_sludge = data_with_factory.get('rgb_sludge_zone')
+                if rgb_clear:
+                    logger.info(f"📤 Sending clear zone RGB: {{r: {rgb_clear.get('r', 'N/A')}, g: {rgb_clear.get('g', 'N/A')}, b: {rgb_clear.get('b', 'N/A')}}}")
+                else:
+                    logger.warning("⚠️  No clear zone RGB in data to send")
+                
+                if rgb_sludge:
+                    logger.info(f"📤 Sending sludge zone RGB: {{r: {rgb_sludge.get('r', 'N/A')}, g: {rgb_sludge.get('g', 'N/A')}, b: {rgb_sludge.get('b', 'N/A')}}}")
+                else:
+                    logger.warning("⚠️  No sludge zone RGB in data to send")
+                
                 try:
                     self.sio.emit("sludge-data", data_with_factory)
                     logger.info(f"Sent sludge-data to backend: t={data.get('t_min', '?')}min, testId={data.get('testId', 'N/A')}")
