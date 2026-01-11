@@ -22,6 +22,10 @@ class SludgeData(TypedDict, total=False):
     floc_avg_size_mm: float
     rgb_clear_zone: Optional[Dict[str, int]]
     rgb_sludge_zone: Optional[Dict[str, int]]
+    sludge_height_array: Optional[list[float]]
+    clarity: Optional[float]
+    instantaneous_velocity_array: Optional[list[float]]
+    warning: Optional[Dict[str, str]]
     image_path: Optional[str]
     # Legacy fields
     sludge_height_px: Optional[float]

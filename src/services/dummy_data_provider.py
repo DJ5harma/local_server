@@ -88,8 +88,8 @@ class DummyDataProvider(DataProvider):
             }
             
             # Generate floc data
-            floc_count = random.randint(40, 80)
-            floc_avg_size = random.uniform(1.5, 3.5)  # mm
+            floc_count = random.randint(30, 100)
+            floc_avg_size = round(random.uniform(1.5, 3.5), 1)  # mm
             
             # Determine test type based on current IST time
             now = now_ist()
@@ -178,9 +178,28 @@ class DummyDataProvider(DataProvider):
                 "b": min(255, initial_data["rgb_clear_zone"]["b"] + random.randint(0, 10))
             }
             
+            # Generate arrays and single values
+            sludge_height_array = self._generate_sludge_height_array(mixture_height, final_sludge_height)
+            clarity = self._generate_clarity()
+            instantaneous_velocity_array = self._generate_instantaneous_velocity_array(
+                mixture_height, 
+                final_sludge_height, 
+                velocity_mm_per_min
+            )
+            
+            # Randomly add warning (10% chance)
+            has_warning = random.random() < 0.1
+            warning = None
+            if has_warning:
+                warning = {
+                    "status": "failed",
+                    "message": "Failed to upload test data to AWS S3. Please check the connection.",
+                    "errorDetails": "Connection timeout: Unable to reach AWS S3 bucket. Retrying..."
+                }
+
             logger.info(f"Generated t={test_duration_minutes} data: SV30={sv30_percentage:.1f}%")
             
-            return {
+            result = {
                 "testId": initial_data["testId"],
                 "timestamp": timestamp,
                 "testType": initial_data.get("testType", "morning"),
@@ -192,13 +211,77 @@ class DummyDataProvider(DataProvider):
                 "sv30_mL_per_L": round(sv30_mL_per_L, 1),
                 "velocity_mm_per_min": round(velocity_mm_per_min, 2),
                 "floc_count": initial_data["floc_count"],
-                "floc_avg_size_mm": round(initial_data["floc_avg_size_mm"], 2),
+                "floc_avg_size_mm": round(initial_data["floc_avg_size_mm"], 1),
                 "rgb_clear_zone": rgb_clear_zone,
                 "rgb_sludge_zone": initial_data["rgb_sludge_zone"],
+                "sludge_height_array": sludge_height_array,
+                "clarity": clarity,
+                "instantaneous_velocity_array": instantaneous_velocity_array,
             }
+            
+            if warning:
+                result["warning"] = warning
+                
+            return result
         except Exception as e:
             logger.error(f"Failed to generate t=30 data: {e}")
             raise DataGenerationError(f"Failed to generate t=30 data: {str(e)}") from e
+    
+    def _generate_sludge_height_array(self, initial_height: float, final_height: float) -> List[float]:
+        """
+        Generate sludge height array with realistic settling curve.
+        Matches generateSludgeHeightArray from dataSender.ts
+        """
+        array = []
+        variation = random.uniform(0.8, 1.2)
+        
+        for i in range(30):
+            progress = i / 30
+            # baseHeight = initialHeight - (initialHeight - finalHeight) * (1 - Math.exp(-progress * 2 * variation))
+            import math
+            base_height = initial_height - (initial_height - final_height) * (1 - math.exp(-progress * 2 * variation))
+            
+            # Add small random noise (±2mm)
+            noise = random.uniform(-2, 2)
+            height = max(final_height, min(initial_height, base_height + noise))
+            array.append(round(height, 2))
+            
+        return array
+
+    def _generate_clarity(self) -> float:
+        """
+        Generate single clarity value (0-1).
+        Matches generateClarity from dataSender.ts
+        """
+        # Generate a single clarity value between 0.2 and 0.98
+        clarity = random.uniform(0.2, 0.98)
+        return round(clarity, 2)
+
+    def _generate_instantaneous_velocity_array(
+        self,
+        initial_height: float,
+        final_height: float,
+        average_velocity: float
+    ) -> List[float]:
+        """
+        Generate instantaneous velocity array.
+        Matches generateInstantaneousVelocityArray from dataSender.ts
+        """
+        array = []
+        import math
+        
+        for i in range(30):
+            progress = i / 30
+            # Velocity typically starts high and decreases over time
+            # Use exponential decay with some variation
+            base_velocity = average_velocity * (1 + math.exp(-progress * 3))
+            
+            # Add variation (±20%)
+            variation = random.uniform(0.8, 1.2)
+            velocity = max(0.01, base_velocity * variation)
+            array.append(round(velocity, 3))
+            
+        return array
     
     def generate_height_history(
         self,
