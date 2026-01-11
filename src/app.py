@@ -68,9 +68,9 @@ backend_sender = get_backend_sender()
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sv30_path = os.path.join(BASE_DIR, "sv30_pipeline")
 # To use SV30 data provider instead, uncomment the line below and comment out the dummy provider:
-# data_provider = SV30DataProvider(sv30_path=sv30_path)
-from .services.dummy_data_provider import DummyDataProvider
-data_provider = DummyDataProvider()
+data_provider = SV30DataProvider(sv30_path=sv30_path)
+# from .services.dummy_data_provider import DummyDataProvider
+# data_provider = DummyDataProvider()
 
 # Initialize test service
 test_service = TestService(
