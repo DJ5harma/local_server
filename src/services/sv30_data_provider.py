@@ -186,7 +186,82 @@ class SV30DataProvider(DataProvider):
         # Log final RGB values being returned
         logger.info(f"[SV30] 📤 t=30 data RGB - Clear: {{r: {rgb_clear_zone['r']}, g: {rgb_clear_zone['g']}, b: {rgb_clear_zone['b']}}}, Sludge: {{r: {rgb_sludge_zone['r']}, g: {rgb_sludge_zone['g']}, b: {rgb_sludge_zone['b']}}}")
         
-        return {
+        # User requested NO dummy data in real pipeline
+        # If ML doesn't produce it, send 0 or empty list
+        
+        sludge_height_array = []
+        instantaneous_velocity_array = []
+        clarity = 0.0
+        
+        # Try to load sludge detection details for arrays
+        sludge_json_file = os.path.join(self.sv30_path, "results", "sludge_detection.json")
+        
+        if os.path.exists(sludge_json_file) and "px_to_mm_ratio" in metrics:
+            try:
+                with open(sludge_json_file, 'r') as f:
+                    sludge_data = json.load(f)
+                
+                frames = sludge_data.get("frames", [])
+                
+                if frames:
+                    # Constants for conversion
+                    px_to_mm = metrics["px_to_mm_ratio"]
+                    mixture_top_y = metrics["mixture_top_y_px"] 
+                    mixture_height_px = metrics["mixture_height_px"]
+                    image_height_px = mixture_height_px + mixture_top_y
+                    
+                    # Generate 30 points (one per minute)
+                    # Pipeline extracts 1 frame every 10 seconds -> 6 frames/min
+                    current_height_mm = metrics["mixture_height_mm"] # Start at mixture height
+                    
+                    # Add current height as start (t=0)? 
+                    # No, usually array is t=1 to t=30? 
+                    # dataSender.ts pushes 30 values.
+                    
+                    for i in range(1, 31):
+                        # discrete minute marks: 1, 2, ..., 30
+                        # frame index ~ minute * 6 (since 10s per frame)
+                        # e.g. min 1 = 60s = frame index 6 (approx)
+                        target_idx = min(i * 6, len(frames) - 1)
+                        
+                        if target_idx < len(frames):
+                            frame = frames[target_idx]
+                            sludge_y = frame["sludge_interface_y"]
+                            
+                            # Calculate height from bottom
+                            h_px = image_height_px - sludge_y
+                            h_mm = h_px * px_to_mm
+                            sludge_height_array.append(round(h_mm, 2))
+                        else:
+                            # If we don't have enough frames, hold last value
+                            sludge_height_array.append(sludge_height_array[-1] if sludge_height_array else 0.0)
+                            
+                    # Calculate velocity array (change in height per minute)
+                    # V[i] = Height[i-1] - Height[i]
+                    # For i=0 (minute 1), use initial mixture height as previous
+                    
+                    prev_h = metrics["mixture_height_mm"]
+                    
+                    for h in sludge_height_array:
+                        # Velocity is rate of settling (decrease in height)
+                        # So (Previous - Current)
+                        vel = max(0, prev_h - h) # Ensure non-negative
+                        instantaneous_velocity_array.append(round(vel, 3))
+                        prev_h = h
+                        
+                    logger.info(f"[SV30] ✅ Extracted {len(sludge_height_array)} height points from real data")
+                    
+            except Exception as e:
+                logger.error(f"[SV30] ⚠️ Failed to process arrays from real data: {e}")
+                import traceback
+                logger.debug(traceback.format_exc())
+                sludge_height_array = []
+                instantaneous_velocity_array = []
+        
+        # No dummy warnings for real pipeline
+        warning = None
+            
+        result = {
             "testId": initial_data.get("testId"),
             "timestamp": timestamp,
             "testType": initial_data.get("testType", "morning"),
@@ -197,11 +272,20 @@ class SV30DataProvider(DataProvider):
             "sv30_height_mm": round(metrics['sludge_height_t30_mm'], 2),
             "sv30_mL_per_L": round(metrics['sv30_mL_per_L'], 1),
             "velocity_mm_per_min": round(metrics['settling_rate_mm_per_min'], 2),
+            # Keep original values (likely 0 from t0 if no new data)
             "floc_count": initial_data.get("floc_count", 0),
-            "floc_avg_size_mm": round(initial_data.get("floc_avg_size_mm", 0.0), 2),
+            "floc_avg_size_mm": round(initial_data.get("floc_avg_size_mm", 0.0), 1),
             "rgb_clear_zone": rgb_clear_zone,
-            "rgb_sludge_zone": rgb_sludge_zone
+            "rgb_sludge_zone": rgb_sludge_zone,
+            "sludge_height_array": sludge_height_array,
+            "clarity": clarity,
+            "instantaneous_velocity_array": instantaneous_velocity_array,
         }
+        
+        if warning:
+            result["warning"] = warning
+            
+        return result
     
     def generate_height_history(self, initial_data: Dict[str, Any], duration_minutes: float, interval_seconds: int = 10) -> List[Dict[str, Any]]:
         """Not used - return empty"""
